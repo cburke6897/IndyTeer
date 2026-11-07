@@ -34,7 +34,7 @@ export default function OrgProfilePage({ own }: { own?: boolean }) {
   const volunteersCount = orgVolunteers(db, org.id).length
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6">
       {!own && <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy-700 hover:underline"><ArrowLeft size={15} /> Back</button>}
       <OrgProfileHeader
         org={org}
