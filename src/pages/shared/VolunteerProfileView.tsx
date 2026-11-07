@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Award, BadgeCheck, Lock, Mail, Pencil, Phone } from 'lucide-react'
+import { ArrowLeft, Award, BadgeCheck, Lock, Pencil, Phone } from 'lucide-react'
 import { Badge } from '../../components/ui/Badge'
 import { Button, LinkButton } from '../../components/ui/Button'
 import { Card, CardHeader } from '../../components/ui/Card'
@@ -11,8 +11,7 @@ import { VolunteerProfileHeader } from '../../components/domain/ProfileHeader'
 import { VolunteerProfileForm } from '../../components/domain/ProfileForms'
 import { cn, formatDate, formatHours } from '../../lib/utils'
 import { useSession } from '../../store/session'
-import { followedOrgs, getOpp, getUser, getVolunteer, hourEntries, hourTotals, volunteerRegistrations } from '../../store/selectors'
-import { defaultSettings } from '../../data/seed'
+import { followedOrgs, getOpp, getVolunteer, hourEntries, hourTotals, sharedEntries, volunteerRegistrations } from '../../store/selectors'
 
 /** Volunteer profile. `own` = editable self view; otherwise read-only view for organizations (respects privacy settings). */
 export default function VolunteerProfilePage({ own }: { own?: boolean }) {
@@ -23,17 +22,15 @@ export default function VolunteerProfilePage({ own }: { own?: boolean }) {
   const volunteer = own ? me : getVolunteer(db, params.id)
   if (!volunteer) return <EmptyState title="Volunteer not found" action={<LinkButton to="/org/volunteers" variant="primary">Back to volunteers</LinkButton>} />
 
-  const settings = (volunteer.userId && db.settings[volunteer.userId]) || defaultSettings()
+  // The database only returns a profile (and its hours/history) when the volunteer allows it.
   const hidden = !own
-  const isPrivate = hidden && !settings.privacy.publicProfile
-  const showHours = !hidden || settings.privacy.showHours
-  const showHistory = !hidden || settings.privacy.showHistory
+  const isPrivate = false
+  const showHours = !hidden || volunteer.privacy.showHours
+  const showHistory = !hidden || volunteer.privacy.showHistory
 
-  const entries = hourEntries(db, volunteer.id)
-  const totals = hourTotals(entries)
-  const orgs = followedOrgs(db, volunteer.id)
-  const user = getUser(db, volunteer.userId)
-  const email = user?.email ?? `${volunteer.firstName.toLowerCase()}.${volunteer.lastName.toLowerCase()}@example.com`
+  const entries = own ? hourEntries(db, volunteer.id) : sharedEntries(db, volunteer)
+  const totals = own ? hourTotals(entries) : { ...hourTotals(entries), verified: volunteer.shared?.verifiedHours ?? 0 }
+  const orgs = own ? followedOrgs(db, volunteer.id) : []
   const categories = new Set(volunteerRegistrations(db, volunteer.id).filter((r) => r.attended).map((r) => getOpp(db, r.oppId)?.category))
 
   const badges = [
@@ -60,7 +57,7 @@ export default function VolunteerProfilePage({ own }: { own?: boolean }) {
             <Card className="p-5 sm:p-6">
               <h2 className="text-base">About</h2>
               <p className="mt-2 text-[15px] leading-relaxed text-ink/90">{volunteer.bio}</p>
-              <div className="mt-6 grid gap-6 sm:grid-cols-2">
+              {own && <div className="mt-6 grid gap-6 sm:grid-cols-2">
                 <div>
                   <h3 className="mb-2 text-sm">Skills</h3>
                   <div className="flex flex-wrap gap-1.5">{volunteer.skills.length ? volunteer.skills.map((s) => <Badge key={s} tone="navy">{s}</Badge>) : <span className="text-sm text-muted">None listed</span>}</div>
@@ -69,7 +66,7 @@ export default function VolunteerProfilePage({ own }: { own?: boolean }) {
                   <h3 className="mb-2 text-sm">Interests</h3>
                   <div className="flex flex-wrap gap-1.5">{volunteer.interests.map((s) => <Badge key={s} tone="gold">{s}</Badge>)}</div>
                 </div>
-              </div>
+              </div>}
               {volunteer.availability && <p className="mt-5 text-sm text-muted">Availability: <span className="font-semibold text-ink">{volunteer.availability}</span></p>}
             </Card>
 
@@ -101,14 +98,14 @@ export default function VolunteerProfilePage({ own }: { own?: boolean }) {
           <aside className="space-y-4">
             <Card>
               <CardHeader title="Impact" />
-              <dl className="grid grid-cols-3 gap-px bg-line text-center">
+              <dl className={cn('grid gap-px bg-line text-center', own ? 'grid-cols-3' : 'grid-cols-2')}>
                 <div className="bg-white p-3"><dd className="text-xl font-bold text-navy">{showHours ? formatHours(totals.verified) : '—'}</dd><dt className="text-[11px] text-muted">Verified hrs</dt></div>
                 <div className="bg-white p-3"><dd className="text-xl font-bold text-navy">{totals.completed}</dd><dt className="text-[11px] text-muted">Events</dt></div>
-                <div className="bg-white p-3"><dd className="text-xl font-bold text-navy">{orgs.length}</dd><dt className="text-[11px] text-muted">Following</dt></div>
+                {own && <div className="bg-white p-3"><dd className="text-xl font-bold text-navy">{orgs.length}</dd><dt className="text-[11px] text-muted">Following</dt></div>}
               </dl>
             </Card>
 
-            <Card>
+            {own && <Card>
               <CardHeader title="Achievements" subtitle={`${earned} of ${badges.length} earned`} />
               <ul className="grid grid-cols-2 gap-2 p-4">
                 {badges.map((b) => (
@@ -119,9 +116,9 @@ export default function VolunteerProfilePage({ own }: { own?: boolean }) {
                   </li>
                 ))}
               </ul>
-            </Card>
+            </Card>}
 
-            <Card>
+            {own && <Card>
               <CardHeader title="Organizations followed" />
               {orgs.length === 0 ? <p className="px-5 py-6 text-center text-sm text-muted">Not following anyone yet.</p> : (
                 <ul className="divide-y divide-line">
@@ -134,14 +131,15 @@ export default function VolunteerProfilePage({ own }: { own?: boolean }) {
                   ))}
                 </ul>
               )}
-            </Card>
+            </Card>}
 
             {!own && (
               <Card>
                 <CardHeader title="Contact" />
                 <ul className="space-y-3 p-5 text-sm">
-                  <li className="flex items-center gap-3"><Mail size={16} className="text-navy-700" /><a href={`mailto:${email}`} className="font-medium break-all text-navy-700 hover:underline">{email}</a></li>
-                  {volunteer.phone && <li className="flex items-center gap-3"><Phone size={16} className="text-navy-700" />{volunteer.phone}</li>}
+                  {volunteer.phone
+                    ? <li className="flex items-center gap-3"><Phone size={16} className="text-navy-700" />{volunteer.phone}</li>
+                    : <li className="text-muted">No contact details shared.</li>}
                 </ul>
               </Card>
             )}

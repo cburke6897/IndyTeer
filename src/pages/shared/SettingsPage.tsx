@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Bell, Lock, LogOut, RotateCcw, ShieldCheck, Trash2, User, UserCog } from 'lucide-react'
+import { Bell, Lock, LogOut, ShieldCheck, Trash2, User, UserCog } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Card, CardHeader } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { ImageUpload } from '../../components/ui/ImageUpload'
-import { ConfirmDialog } from '../../components/ui/Modal'
 import { DeleteAccountModal } from '../../components/domain/DeleteAccountModal'
 import { TextInput } from '../../components/ui/Field'
 import { PasswordInput } from '../../components/ui/PasswordInput'
@@ -13,8 +12,9 @@ import { ToggleRow } from '../../components/ui/Toggle'
 import { OrgProfileForm, VolunteerProfileForm } from '../../components/domain/ProfileForms'
 import { cn, isEmail } from '../../lib/utils'
 import { useSession } from '../../store/session'
-import { defaultSettings } from '../../data/seed'
-import { resetDemoData, updateOrgProfile, updateSettings, updateUser, updateVolunteerProfile } from '../../store/actions'
+import { defaultSettings } from '../../data/defaults'
+import { removeAvatar, saveSettings, uploadOrgImage, updateOrgProfile } from '../../store/actions'
+import { act } from '../../store/act'
 import { saveFullName, updateEmail, updatePassword, verifyPassword } from '../../auth/accountService'
 import { useProfileContext } from '../../auth/useProfileContext'
 import { useLogout } from '../../auth/useLogout'
@@ -69,7 +69,6 @@ function AccountSection() {
   const [pw, setPw] = useState({ current: '', next: '', confirm: '' })
   const [pwErr, setPwErr] = useState<Record<string, string>>({})
   const [del, setDel] = useState(false)
-  const [reset, setReset] = useState(false)
 
   async function saveAccount(e: React.FormEvent) {
     e.preventDefault()
@@ -84,8 +83,6 @@ function AccountSection() {
       const emailChanged = f.email.trim().toLowerCase() !== user!.email.toLowerCase()
       if (emailChanged) await updateEmail(f.email)
       setProfile(await saveFullName(f.firstName, f.lastName))
-      updateUser(user!.id, { firstName: f.firstName.trim(), lastName: f.lastName.trim() })
-      if (volunteer) updateVolunteerProfile(volunteer.id, { firstName: f.firstName.trim(), lastName: f.lastName.trim() })
       toast(emailChanged ? 'Saved. Confirm your new email address using the link we sent.' : 'Account details saved.')
     } catch (cause) {
       setErr({ email: cause instanceof Error ? cause.message : 'Could not save your account details.' })
@@ -116,10 +113,10 @@ function AccountSection() {
   return (
     <>
       <Card>
-        <CardHeader title="Account" subtitle="Your sign-in details" action={<Badge tone="gold">{user!.accountType === 'volunteer' ? 'Volunteer account' : 'Organization account'}</Badge>} />
+        <CardHeader title="Account" subtitle="Your sign-in details" action={org ? <Badge tone="gold">Organization admin</Badge> : undefined} />
         <form onSubmit={saveAccount} noValidate className="space-y-5 p-5">
-          {volunteer && <ImageUpload label="Profile picture" shape="circle" upload={uploadAvatar} value={volunteer.avatar} onChange={(v) => updateVolunteerProfile(volunteer.id, { avatar: v })} />}
-          {org && <ImageUpload label="Organization logo" value={org.logo} onChange={(v) => updateOrgProfile(org.id, { logo: v })} />}
+          {volunteer && <ImageUpload label="Profile picture" shape="circle" upload={uploadAvatar} value={volunteer.avatar} hint="JPG, PNG or WebP, up to 2 MB." onChange={(v) => { if (v === null) void act(removeAvatar().then(setProfile), 'Profile picture removed.', 'info') }} />}
+          {org && <ImageUpload label="Organization logo" value={org.logo} upload={(file) => uploadOrgImage(org.id, 'logo', file)} hint="JPG, PNG or WebP, up to 2 MB." onChange={(v) => { if (v === null) void act(updateOrgProfile(org.id, { name: org.name, type: org.type, description: org.description, mission: org.mission, website: org.website, city: org.city, email: org.email, phone: org.phone, focus: org.focus, logo: null }), 'Logo removed.', 'info') }} />}
           <div className="grid gap-4 sm:grid-cols-2">
             <TextInput label={org ? 'Admin first name' : 'First name'} value={f.firstName} onChange={(e) => setF({ ...f, firstName: e.target.value })} error={err.firstName} />
             <TextInput label={org ? 'Admin last name' : 'Last name'} value={f.lastName} onChange={(e) => setF({ ...f, lastName: e.target.value })} error={err.lastName} />
@@ -149,17 +146,12 @@ function AccountSection() {
             <Button variant="secondary" icon={<LogOut size={16} />} onClick={() => void logout()}>Log out</Button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-            <div><p className="text-sm font-semibold text-ink">Reset demo data</p><p className="text-[13px] text-muted">Restore the original sample data and sign out. Handy before a demo.</p></div>
-            <Button variant="secondary" icon={<RotateCcw size={16} />} onClick={() => setReset(true)}>Reset</Button>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 p-5">
             <div><p className="text-sm font-semibold text-danger">Delete account</p><p className="text-[13px] text-muted">Permanently delete your account, sign-in, and data.</p></div>
             <Button variant="dangerOutline" icon={<Trash2 size={16} />} onClick={() => setDel(true)}>Delete account</Button>
           </div>
         </div>
       </Card>
 
-      <ConfirmDialog open={reset} onClose={() => setReset(false)} destructive title="Reset all demo data?" message="Everything you created in this browser (accounts, opportunities, registrations) will be replaced with the original sample data." confirmLabel="Reset demo data" onConfirm={() => { resetDemoData(); void logout('Demo data reset. Log in to start fresh.') }} />
       {del && <DeleteAccountModal userId={user!.id} onClose={() => setDel(false)} />}
     </>
   )
@@ -180,8 +172,9 @@ function ProfileSection() {
 
 function useSettings() {
   const { db, user } = useSession()
+  const { setProfile } = useProfileContext()
   const s: Settings = db.settings[user!.id] ?? defaultSettings()
-  return { s, update: (fn: (x: Settings) => Settings) => updateSettings(user!.id, fn) }
+  return { s, update: (fn: (x: Settings) => Settings) => { void act(saveSettings(fn(s)).then(setProfile)) } }
 }
 
 function NotificationsSection() {
@@ -234,10 +227,9 @@ function NotificationsSection() {
       <CardHeader title="Notifications" subtitle="Choose what IndyTeer tells you about" />
       <div className="divide-y divide-line px-5">
         <ToggleRow title="Email notifications" description="Receive notifications by email as well as in the app." checked={n.email} onChange={set('email')} />
-        <ToggleRow title="Event reminders" description="A reminder the day before events you’re registered for." checked={n.reminders} onChange={set('reminders')} />
         <ToggleRow title="New opportunity notifications" description="When organizations you follow post new opportunities." checked={n.newOpportunities} onChange={set('newOpportunities')} />
         <ToggleRow title="Organization updates" description="News and announcements from organizations you follow." checked={n.orgUpdates} onChange={set('orgUpdates')} />
-        <ToggleRow title="Registration confirmations" description="Confirmations when registrations are approved or change." checked={n.confirmations} onChange={set('confirmations')} />
+        <ToggleRow title="Registration updates" description="When a registration is approved, declined, or your hours are verified." checked={n.confirmations} onChange={set('confirmations')} />
         <ToggleRow title="Block organization invitations" description="Stop organizations from sending you new invitations. Existing invitations stay available to accept or decline." checked={inviteOptOut} onChange={toggleInviteOptOut} disabled={!invitePreferenceLoaded || inviteBusy} />
       </div>
       {invitationsLoaded && invitations.length > 0 && <div className="border-t border-line px-5 py-4">
@@ -260,14 +252,22 @@ function PrivacySection() {
   const { org } = useSession()
   const { s, update } = useSettings()
   const p = s.privacy
-  const set = <K extends keyof Settings['privacy']>(k: K) => (v: Settings['privacy'][K]) => { update((x) => ({ ...x, privacy: { ...x.privacy, [k]: v } })); toast('Privacy setting saved.', 'info') }
+  const set = <K extends keyof Settings['privacy']>(k: K) => (v: Settings['privacy'][K]) => { update((x) => ({ ...x, privacy: { ...x.privacy, [k]: v } })) }
+  if (org) {
+    return (
+      <Card>
+        <CardHeader title="Privacy" subtitle="Control who can see your information" action={<ShieldCheck size={18} className="text-navy-700" />} />
+        <p className="p-5 text-sm text-muted">Organization pages are public to every signed-in volunteer. Your personal profile settings apply to your own volunteer-style profile only.</p>
+      </Card>
+    )
+  }
   return (
     <Card>
       <CardHeader title="Privacy" subtitle="Control who can see your information" action={<ShieldCheck size={18} className="text-navy-700" />} />
       <div className="divide-y divide-line px-5">
-        <ToggleRow title={org ? 'Public organization page' : 'Public profile'} description={org ? 'Let volunteers find your page in Organizations.' : 'Let organizations view your volunteer profile. If off, organizations you have a pending or approved registration with can still view it.'} checked={p.publicProfile} onChange={set('publicProfile')} />
-        {!org && <ToggleRow title="Display volunteer hours publicly" description="Show your total verified hours on your profile." checked={p.showHours} onChange={set('showHours')} />}
-        {!org && <ToggleRow title="Display volunteer history publicly" description="Show events you’ve volunteered at." checked={p.showHistory} onChange={set('showHistory')} />}
+        <ToggleRow title="Public profile" description="Let organizations view your volunteer profile. If off, organizations you have a pending or approved registration with can still view it." checked={p.publicProfile} onChange={set('publicProfile')} />
+        <ToggleRow title="Display volunteer hours publicly" description="Show your total verified hours on your profile." checked={p.showHours} onChange={set('showHours')} />
+        <ToggleRow title="Display volunteer history publicly" description="Show events you’ve volunteered at." checked={p.showHistory} onChange={set('showHistory')} />
       </div>
     </Card>
   )

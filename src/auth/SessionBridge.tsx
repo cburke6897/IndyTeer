@@ -2,16 +2,16 @@ import { useEffect } from 'react'
 import { useAuth } from './useAuth'
 import { useProfileContext } from './useProfileContext'
 import { shouldDropTemporarySession } from './rememberMe'
-import { syncAuthUser } from '../store/actions'
+import { hydrate } from '../store/sync'
 
 /**
- * Keeps the app's local data store in step with the real session (Supabase Auth) and the
- * public.users row and memberships. Render once inside <ProfileProvider>.
+ * Keeps the client cache in step with the real session. Signed out: loads the public data only.
+ * Signed in: once the user row and memberships are ready, loads everything the person may see.
+ * Render once inside <ProfileProvider>.
  */
 export function SessionBridge() {
   const { user, loading, signOut } = useAuth()
   const { profile, memberships, loading: profileLoading } = useProfileContext()
-  const hasOrganization = memberships.some((m) => m.status === 'active')
 
   useEffect(() => {
     if (shouldDropTemporarySession()) void signOut().catch(() => undefined)
@@ -19,11 +19,11 @@ export function SessionBridge() {
 
   useEffect(() => {
     if (loading) return
-    if (!user) return syncAuthUser(null, null)
-    // Signed in: wait for the database profile. If it failed to load, the guards show an error.
+    if (!user) { void hydrate(null); return }
+    // Signed in: wait for the user row. If it failed to load, the guards show an error screen.
     if (profileLoading || !profile) return
-    syncAuthUser(user, profile, hasOrganization)
-  }, [loading, user, profile, profileLoading, hasOrganization])
+    void hydrate({ authUser: user, profile, memberships })
+  }, [loading, user, profile, memberships, profileLoading])
 
   return null
 }

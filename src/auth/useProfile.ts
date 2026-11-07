@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { getUser } from '../lib/api/users'
 import { listMyMemberships } from '../lib/api/organizations'
+import { withRetry } from '../lib/retry'
 import type { OrganizationMembership, User } from '../types/models'
 
 type ProfileResult = {
@@ -21,7 +22,9 @@ export function useProfile(userId: string | undefined, reloadKey = 0) {
   useEffect(() => {
     if (!userId) return
     let active = true
-    void Promise.all([getUser(userId), listMyMemberships()]).then(([profile, memberships]) => {
+    // Retried quietly: a request right after login can race the session. The loading screen stays up
+    // until it works, and the error screen only appears if every try fails.
+    void withRetry(() => Promise.all([getUser(userId), listMyMemberships()]), { shouldStop: () => !active }).then(([profile, memberships]) => {
       if (active) setResult({ userId, profile, memberships, error: null })
     }).catch((cause: unknown) => {
       if (active) setResult({
@@ -41,6 +44,10 @@ export function useProfile(userId: string | undefined, reloadKey = 0) {
       : previous)
   }, [userId])
 
+  const setMemberships = useCallback((memberships: OrganizationMembership[]) => {
+    setResult((previous) => (previous && previous.userId === userId ? { ...previous, memberships } : previous))
+  }, [userId])
+
   const current = result?.userId === userId ? result : null
   return {
     profile: current?.profile ?? null,
@@ -48,5 +55,6 @@ export function useProfile(userId: string | undefined, reloadKey = 0) {
     error: current?.error ?? null,
     loading: Boolean(userId) && !current,
     setProfile,
+    setMemberships,
   }
 }

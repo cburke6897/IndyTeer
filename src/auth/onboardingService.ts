@@ -1,14 +1,13 @@
 import { completeUserOnboarding } from '../lib/api/users'
 import { createOrganization } from '../lib/api/organizations'
-import type { OrganizationMembership, User } from '../types/models'
+import type { User } from '../types/models'
 
 /**
  * Onboarding goes through the database's supported operations only:
  *  - complete_user_onboarding (RPC) fills the profile, records the terms acceptance and sets
  *    users.onboarded. It refuses to run twice, so a row that is already onboarded is skipped.
  *  - create_organization (RPC) makes the caller the organization's owner. It requires an
- *    onboarded user, and is skipped when the caller already owns an active organization so a
- *    retry or a second browser can never create a duplicate.
+ *    onboarded user and can be used again later for further organizations.
  * Neither writes an account type: there is none in the schema.
  */
 
@@ -21,6 +20,8 @@ export interface VolunteerOnboardingData {
   skills: string[]
   phone: string
   availability: string
+  /** YYYY-MM-DD, optional. Needed to register for age-restricted opportunities. */
+  dateOfBirth?: string
 }
 
 export async function finishVolunteerOnboarding(
@@ -36,6 +37,7 @@ export async function finishVolunteerOnboarding(
     bio: data.bio,
     city: data.city,
     state: 'IN',
+    date_of_birth: data.dateOfBirth || null,
     phone: data.phone || null,
     availability: data.availability ? { summary: data.availability } : {},
     interests: data.interests,
@@ -57,27 +59,12 @@ export interface OrganizationSetupData {
 }
 
 /**
- * Completes the user's onboarding if needed, then creates their organization if they do not
- * already own one. `onProfile` is called as soon as the first step succeeds, so a failure in the
- * second step leaves the cached profile correct and a retry skips the first step.
+ * Creates an organization for the signed-in user through create_organization (RPC). The database
+ * makes the caller its owner (an active `owner` membership); the client never writes membership or
+ * ownership fields. Any standard user who has finished onboarding may call it, any number of times.
  */
-export async function finishOrganizationSetup(
-  profile: User,
-  memberships: OrganizationMembership[],
-  data: OrganizationSetupData,
-  termsAccepted: boolean,
-  onProfile: (profile: User) => void,
-): Promise<{ organizationId: string; created: boolean }> {
-  let current = profile
-  if (!current.onboarded) {
-    if (!termsAccepted) throw new Error('Accept the terms to continue.')
-    current = await completeUserOnboarding({ city: data.city, state: 'IN', terms_accepted: true })
-    onProfile(current)
-  }
-
-  const owned = memberships.find((m) => m.role === 'owner' && m.status === 'active')
-  if (owned) return { organizationId: owned.organization_id, created: false }
-
+export async function createOrganizationForUser(profile: User, data: OrganizationSetupData): Promise<{ organizationId: string }> {
+  if (!profile.onboarded) throw new Error('Finish setting up your profile before creating an organization.')
   const organization = await createOrganization({
     name: data.name,
     type: data.type,
@@ -91,5 +78,5 @@ export async function finishOrganizationSetup(
     focus: data.focus,
     join_policy: 'approval',
   })
-  return { organizationId: organization.id, created: true }
+  return { organizationId: organization.id }
 }

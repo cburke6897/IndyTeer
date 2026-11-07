@@ -44,7 +44,7 @@ export default function SignupPage() {
         terms_accepted_at: new Date().toISOString(),
       })
       // With email confirmation off, a session exists and the route guard moves on to onboarding,
-      // where the person chooses volunteer or organization (no account type is sent at signup).
+      // (there is no account type: everyone is a standard user).
       if (result.needsEmailConfirmation) setSentTo(form.email.trim())
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Could not create your account. Please try again.'

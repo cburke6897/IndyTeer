@@ -21,7 +21,7 @@ export function VolunteerProfileHeader({ volunteer, actions }: { volunteer: Volu
         <p className="mt-0.5 text-[15px] text-ink/80">{volunteer.headline}</p>
         <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-muted">
           <span className="inline-flex items-center gap-1.5"><MapPin size={14} /> {volunteer.city}, {volunteer.state}</span>
-          <span className="inline-flex items-center gap-1.5"><CalendarDays size={14} /> Volunteering since {formatDate(volunteer.joinedAt, { month: 'long', year: 'numeric' })}</span>
+          {volunteer.joinedAt && <span className="inline-flex items-center gap-1.5"><CalendarDays size={14} /> Volunteering since {formatDate(volunteer.joinedAt, { month: 'long', year: 'numeric' })}</span>}
         </p>
       </div>
     </Card>

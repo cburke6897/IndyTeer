@@ -26,7 +26,9 @@ describe('email auth actions', () => {
   it('sends only the full name (and extras) to the trigger, never an account type', async () => {
     signUpMock.mockResolvedValue({ data: { session: null }, error: null })
 
-    const result = await signUpWithEmail(' volunteer@example.org ', 'good-password', ' Kai ', { terms_accepted_at: 'now' })
+    const result = await signUpWithEmail(' volunteer@example.org ', 'good-password', ' Kai ', {
+      terms_accepted_at: 'now',
+    })
 
     expect(signUpMock).toHaveBeenCalledWith({
       email: 'volunteer@example.org',
@@ -46,14 +48,27 @@ describe('email auth actions', () => {
     expect(signUpMock.mock.calls[0][0].options.data.full_name).toBe('Kai')
   })
 
+  it('strips retired account types and authorization fields from signup metadata', async () => {
+    signUpMock.mockResolvedValue({ data: { session: null }, error: null })
+    await signUpWithEmail('kai@example.org', 'good-password', 'Kai', {
+      account_type: 'organization',
+      role: 'admin',
+      is_platform_admin: 'true',
+    })
+    expect(signUpMock.mock.calls[0][0].options.data).toEqual({ full_name: 'Kai' })
+  })
+
   it('reports an immediate signup session when email confirmation is disabled', async () => {
     signUpMock.mockResolvedValue({ data: { session: { access_token: 'token' } }, error: null })
-    await expect(signUpWithEmail('kai@example.org', 'good-password', 'Kai'))
-      .resolves.toEqual({ needsEmailConfirmation: false })
+    await expect(signUpWithEmail('kai@example.org', 'good-password', 'Kai')).resolves.toEqual({
+      needsEmailConfirmation: false,
+    })
   })
 
   it('requires a name before calling Supabase', async () => {
-    await expect(signUpWithEmail('kai@example.org', 'good-password', '  ')).rejects.toThrow('Enter your full name')
+    await expect(signUpWithEmail('kai@example.org', 'good-password', '  ')).rejects.toThrow(
+      'Enter your full name',
+    )
     expect(signUpMock).not.toHaveBeenCalled()
   })
 

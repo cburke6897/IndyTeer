@@ -10,7 +10,7 @@ import { ConfirmDialog, Modal } from '../ui/Modal'
 import { RegStatusBadge } from './OpportunityParts'
 import { formatDate, formatHours } from '../../lib/utils'
 import { markAttended, setRegistrationStatus, unverifyHours, verifyHours } from '../../store/actions'
-import { toast } from '../../store/toast'
+import { act } from '../../store/act'
 import type { Opportunity, Registration, VolunteerProfile } from '../../types'
 
 export interface RegRow { reg: Registration; volunteer: VolunteerProfile; opp: Opportunity }
@@ -31,8 +31,7 @@ export function RegistrationTable({ rows }: { rows: RegRow[] }) {
     if (!verifying) return
     const h = Number(hours)
     if (!(h > 0) || h > 24) return setHoursError('Enter hours between 0.5 and 24.')
-    verifyHours(verifying.reg.id, h)
-    toast(`Verified ${formatHours(h)} hours for ${verifying.volunteer.firstName}.`)
+    void act(verifyHours(verifying.reg.id, h), `Verified ${formatHours(h)} hours for ${verifying.volunteer.firstName}.`)
     setVerifying(null)
   }
 
@@ -83,12 +82,12 @@ export function RegistrationTable({ rows }: { rows: RegRow[] }) {
                     <div className="flex items-center justify-end gap-2">
                       {reg.status === 'pending' && (
                         <>
-                          <Button size="sm" variant="primary" icon={<Check size={14} />} onClick={() => { setRegistrationStatus(reg.id, 'approved'); toast(`Approved ${volunteer.firstName} ${volunteer.lastName}.`) }}>Approve</Button>
-                          <Button size="sm" variant="secondary" icon={<X size={14} />} onClick={() => { setRegistrationStatus(reg.id, 'declined'); toast(`Declined ${volunteer.firstName}’s registration.`, 'info') }}>Decline</Button>
+                          <Button size="sm" variant="primary" icon={<Check size={14} />} onClick={() => void act(setRegistrationStatus(reg.id, 'approved'), `Approved ${volunteer.firstName} ${volunteer.lastName}.`)}>Approve</Button>
+                          <Button size="sm" variant="secondary" icon={<X size={14} />} onClick={() => void act(setRegistrationStatus(reg.id, 'declined'), `Declined ${volunteer.firstName}’s registration.`, 'info')}>Decline</Button>
                         </>
                       )}
                       {reg.status === 'approved' && !reg.attended && (
-                        <Button size="sm" variant="secondary" icon={<UserCheck size={14} />} onClick={() => { markAttended(reg.id, true); toast(`${volunteer.firstName} marked as attended.`) }}>Mark attended</Button>
+                        <Button size="sm" variant="secondary" icon={<UserCheck size={14} />} onClick={() => void act(markAttended(reg.id, true), `${volunteer.firstName} marked as attended.`)}>Mark attended</Button>
                       )}
                       {reg.status === 'approved' && reg.attended && !reg.hoursVerified && (
                         <Button size="sm" variant="accent" icon={<BadgeCheck size={14} />} onClick={() => openVerify(row)}>Verify hours</Button>
@@ -97,12 +96,12 @@ export function RegistrationTable({ rows }: { rows: RegRow[] }) {
                         <Dropdown label="More actions" trigger={() => <span className="flex size-8 items-center justify-center rounded-md border border-line-strong text-muted hover:bg-surface hover:text-navy"><MoreHorizontal size={16} /></span>}>
                           {(close) => (
                             <>
-                              <MenuItem icon={<Check size={15} />} onClick={() => { close(); setRegistrationStatus(reg.id, 'approved'); toast('Registration approved.') }}>{reg.status === 'declined' ? 'Approve instead' : 'Keep approved'}</MenuItem>
+                              <MenuItem icon={<Check size={15} />} onClick={() => { close(); void act(setRegistrationStatus(reg.id, 'approved'), 'Registration approved.') }}>{reg.status === 'declined' ? 'Approve instead' : 'Keep approved'}</MenuItem>
                               {reg.status === 'approved' && reg.attended && (
-                                <MenuItem icon={<X size={15} />} onClick={() => { close(); markAttended(reg.id, false); toast('Attendance cleared.', 'info') }}>Undo attended</MenuItem>
+                                <MenuItem icon={<X size={15} />} onClick={() => { close(); void act(markAttended(reg.id, false), 'Attendance cleared.', 'info') }}>Undo attended</MenuItem>
                               )}
                               {reg.hoursVerified && (
-                                <MenuItem icon={<BadgeCheck size={15} />} onClick={() => { close(); unverifyHours(reg.id); toast('Hours set back to pending.', 'info') }}>Unverify hours</MenuItem>
+                                <MenuItem icon={<BadgeCheck size={15} />} onClick={() => { close(); void act(unverifyHours(reg.id), 'Hours set back to pending.', 'info') }}>Unverify hours</MenuItem>
                               )}
                               {reg.status === 'approved' && <MenuItem icon={<UserMinus size={15} />} danger onClick={() => { close(); setRemoving(row) }}>Remove volunteer</MenuItem>}
                             </>
@@ -125,7 +124,7 @@ export function RegistrationTable({ rows }: { rows: RegRow[] }) {
         title="Remove this volunteer?"
         message={<><strong>{removing?.volunteer.firstName} {removing?.volunteer.lastName}</strong> will be removed from <strong>{removing?.opp.title}</strong> and any attendance or verified hours for this event will be cleared.</>}
         confirmLabel="Remove volunteer"
-        onConfirm={() => { if (!removing) return; setRegistrationStatus(removing.reg.id, 'removed'); toast('Volunteer removed.', 'info') }}
+        onConfirm={() => { if (!removing) return; void act(setRegistrationStatus(removing.reg.id, 'removed'), 'Volunteer removed.', 'info') }}
       />
 
       <Modal

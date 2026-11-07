@@ -11,6 +11,8 @@ export type ProfileContextValue = {
   error: string | null
   /** Updates the cached profile after a successful write (does not write to the database). */
   setProfile: (profile: User) => void
+  /** Replaces the cached memberships after a successful write (for example creating an organization). */
+  setMemberships: (memberships: OrganizationMembership[]) => void
   /** Reloads the profile and memberships (also used by the error screen's retry button). */
   retry: () => void
 }

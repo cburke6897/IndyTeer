@@ -7,7 +7,7 @@ import { ProfileContext, type ProfileContextValue } from './ProfileContext'
 export function ProfileProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const [attempt, setAttempt] = useState(0)
-  const { profile, memberships, loading, error, setProfile } = useProfile(user?.id, attempt)
+  const { profile, memberships, loading, error, setProfile, setMemberships } = useProfile(user?.id, attempt)
 
   const value: ProfileContextValue = {
     profile,
@@ -15,6 +15,7 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
     loading,
     error,
     setProfile,
+    setMemberships,
     retry: () => setAttempt((n) => n + 1),
   }
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>

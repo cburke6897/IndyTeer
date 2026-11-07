@@ -5,11 +5,10 @@ import { ImageUpload } from '../ui/ImageUpload'
 import { SelectInput, TextArea, TextInput } from '../ui/Field'
 import { AVAILABILITY_OPTIONS, CATEGORIES, INDIANA_CITIES, ORG_TYPES, SKILLS } from '../../lib/constants'
 import { isEmail, normalizeUrl } from '../../lib/utils'
-import { updateOrgProfile, updateVolunteerProfile } from '../../store/actions'
+import { saveVolunteerProfile, updateOrgProfile, uploadOrgImage } from '../../store/actions'
 import { toast } from '../../store/toast'
 import { useAvatarUpload } from '../../media/useAvatarUpload'
 import { useProfileContext } from '../../auth/useProfileContext'
-import { saveFullName } from '../../auth/accountService'
 import type { OrgProfile, VolunteerProfile } from '../../types'
 
 const phoneOk = (p: string) => !p || /^[\d\s().+-]{7,}$/.test(p)
@@ -36,15 +35,13 @@ export function VolunteerProfileForm({ volunteer, onDone, onCancel, id }: { volu
     setErr(x)
     if (Object.keys(x).length) return
     try {
-      // Display name lives in public.profiles; avatar was already saved by the uploader.
-      setProfile(await saveFullName(f.firstName, f.lastName))
+      // The profile lives in public.users; a new picture was already saved by the uploader.
+      setProfile(await saveVolunteerProfile(f))
+      toast('Profile updated.')
+      onDone?.()
     } catch (cause) {
-      setErr({ firstName: cause instanceof Error ? cause.message : 'Could not save your name. Try again.' })
-      return
+      setErr({ firstName: cause instanceof Error ? cause.message : 'Could not save your profile. Try again.' })
     }
-    updateVolunteerProfile(volunteer.id, { ...f, firstName: f.firstName.trim(), lastName: f.lastName.trim(), headline: f.headline.trim(), bio: f.bio.trim() })
-    toast('Profile updated.')
-    onDone?.()
   }
 
   return (
@@ -90,7 +87,7 @@ export function OrgProfileForm({ org, onDone, onCancel, id }: { org: OrgProfile;
   const [err, setErr] = useState<Record<string, string>>({})
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }))
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
     const x: Record<string, string> = {}
     if (!f.name.trim()) x.name = 'Required'
@@ -102,16 +99,20 @@ export function OrgProfileForm({ org, onDone, onCancel, id }: { org: OrgProfile;
     if (!phoneOk(f.phone)) x.phone = 'Enter a valid phone number.'
     setErr(x)
     if (Object.keys(x).length) return
-    updateOrgProfile(org.id, { ...f, name: f.name.trim(), description: f.description.trim(), mission: f.mission.trim(), website: normalizeUrl(f.website.trim()), email: f.email.trim() })
-    toast('Organization profile updated.')
-    onDone?.()
+    try {
+      await updateOrgProfile(org.id, { ...f, name: f.name.trim(), description: f.description.trim(), mission: f.mission.trim(), website: normalizeUrl(f.website.trim()), email: f.email.trim() })
+      toast('Organization profile updated.')
+      onDone?.()
+    } catch (cause) {
+      setErr({ name: cause instanceof Error ? cause.message : 'Could not save the organization. Try again.' })
+    }
   }
 
   return (
     <form id={id} onSubmit={submit} noValidate className="space-y-5">
       <div className="grid gap-6 sm:grid-cols-2">
-        <ImageUpload label="Logo" value={f.logo} onChange={(v) => set('logo', v)} />
-        <ImageUpload label="Cover image" shape="wide" value={f.cover} onChange={(v) => set('cover', v)} hint="Optional banner for your profile page." />
+        <ImageUpload label="Logo" value={f.logo} upload={(file) => uploadOrgImage(org.id, 'logo', file)} onChange={(v) => set('logo', v)} hint="JPG, PNG or WebP, up to 2 MB." />
+        <ImageUpload label="Cover image" shape="wide" value={f.cover} upload={(file) => uploadOrgImage(org.id, 'cover', file)} onChange={(v) => set('cover', v)} hint="Optional banner for your profile page. Up to 2 MB." />
       </div>
       <TextInput label="Organization name" value={f.name} onChange={(e) => set('name', e.target.value)} error={err.name} />
       <div className="grid gap-4 sm:grid-cols-2">

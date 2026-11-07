@@ -6,7 +6,7 @@ import { LinkButton } from '../../components/ui/Button'
 import { useSession } from '../../store/session'
 import { getOpp } from '../../store/selectors'
 import { createOpportunity, updateOpportunity } from '../../store/actions'
-import { toast } from '../../store/toast'
+import { act } from '../../store/act'
 
 export default function OpportunityEditorPage({ mode }: { mode: 'create' | 'edit' }) {
   const { id } = useParams()
@@ -28,15 +28,11 @@ export default function OpportunityEditorPage({ mode }: { mode: 'create' | 'edit
         key={existing?.id ?? 'new'}
         initial={existing}
         onCancel={() => navigate('/org/opportunities')}
-        onSubmit={(values) => {
-          if (existing) {
-            updateOpportunity(existing.id, values)
-            toast(values.status === 'published' ? 'Opportunity updated.' : 'Draft saved.')
-          } else {
-            createOpportunity(org!.id, values)
-            toast(values.status === 'published' ? 'Opportunity published. It’s now live in the volunteer feed.' : 'Draft saved.')
-          }
-          navigate('/org/opportunities')
+        onSubmit={async (values) => {
+          const done = existing
+            ? await act(updateOpportunity(existing.id, values).then(() => true), values.status === 'published' ? 'Opportunity updated.' : 'Draft saved.')
+            : await act(createOpportunity(org!.id, values).then(() => true), values.status === 'published' ? 'Opportunity published. It’s now live in the volunteer feed.' : 'Draft saved.')
+          if (done) navigate('/org/opportunities')
         }}
       />
     </div>

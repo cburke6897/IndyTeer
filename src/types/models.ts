@@ -5,6 +5,7 @@ export type OpportunityStatus = 'draft' | 'published'
 export type RecurrenceType = 'none' | 'weekly' | 'biweekly' | 'monthly'
 export type RegistrationStatus = 'pending' | 'approved' | 'declined' | 'cancelled' | 'removed'
 export type PostKind = 'update' | 'announcement'
+export type ProfileVisibility = 'everyone' | 'members' | 'organizations'
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
@@ -29,6 +30,7 @@ export interface User {
   is_platform_admin: boolean
   terms_accepted_at: string | null
   public_profile: boolean
+  profile_visibility?: ProfileVisibility
   show_hours: boolean
   show_history: boolean
   created_at: string
@@ -38,7 +40,7 @@ export interface User {
 export type UserUpdate = Partial<Pick<User,
   'first_name' | 'last_name' | 'full_name' | 'headline' | 'bio' | 'city' | 'state' | 'timezone' |
   'avatar_url' | 'avatar_path' | 'phone' | 'availability' | 'interests' | 'skills' |
-  'public_profile' | 'show_hours' | 'show_history'>>
+  'public_profile' | 'profile_visibility' | 'show_hours' | 'show_history'>>
 
 export interface Organization {
   id: string
@@ -64,7 +66,7 @@ export interface Organization {
 
 export type PublicOrganization = Pick<Organization,
   'id' | 'name' | 'logo_path' | 'cover_path' | 'type' | 'description' | 'mission' |
-  'website' | 'city' | 'state' | 'focus' | 'verified' | 'founded_year' | 'created_at'>
+  'website' | 'city' | 'state' | 'focus' | 'verified' | 'founded_year' | 'created_at' | 'join_policy'>
 
 export interface OrganizationMembership {
   organization_id: string

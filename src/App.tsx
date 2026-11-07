@@ -1,7 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { AppShell } from './components/layout/AppShell'
-import { PublicOnly, RequireOnboarding, RequireRole } from './components/layout/RouteGuards'
+import { PublicOnly, RequireOnboarded, RequireOnboarding, RequireOrganization } from './components/layout/RouteGuards'
 import { Toaster } from './components/ui/Toaster'
 import { AuthProvider } from './auth/AuthProvider'
 import { ProfileProvider } from './auth/ProfileProvider'
@@ -12,8 +12,7 @@ import LoginPage from './pages/auth/LoginPage'
 import SignupPage from './pages/auth/SignupPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
-import AccountTypePage from './pages/onboarding/AccountTypePage'
-import VolunteerOnboardingPage from './pages/onboarding/VolunteerOnboardingPage'
+import ProfileOnboardingPage from './pages/onboarding/ProfileOnboardingPage'
 import OrgOnboardingPage from './pages/onboarding/OrgOnboardingPage'
 import DashboardPage from './pages/volunteer/DashboardPage'
 import ExplorePage from './pages/volunteer/ExplorePage'
@@ -66,14 +65,16 @@ export default function App() {
         {/* Recovery links sign the user in first, so this route must not bounce signed-in users. */}
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
+        {/* Everyone completes the same standard onboarding. There is no account-type choice. */}
         <Route element={<RequireOnboarding />}>
-          <Route path="/onboarding/account-type" element={<AccountTypePage />} />
-          <Route path="/onboarding/volunteer" element={<VolunteerOnboardingPage />} />
-          <Route path="/onboarding/organization" element={<OrgOnboardingPage />} />
+          <Route path="/onboarding" element={<ProfileOnboardingPage />} />
+          <Route path="/onboarding/*" element={<Navigate to="/onboarding" replace />} />
         </Route>
 
-        <Route element={<RequireRole role="volunteer" />}>
-          <Route path="/app" element={<AppShell role="volunteer" />}>
+        <Route element={<RequireOnboarded />}>
+          {/* Creating an organization is something any standard user can do later. */}
+          <Route path="/create-organization" element={<OrgOnboardingPage />} />
+          <Route path="/app" element={<AppShell area="user" />}>
             <Route index element={<DashboardPage />} />
             <Route path="explore" element={<ExplorePage />} />
             <Route path="opportunities/:id" element={<OpportunityDetailPage />} />
@@ -86,8 +87,8 @@ export default function App() {
           </Route>
         </Route>
 
-        <Route element={<RequireRole role="organization" />}>
-          <Route path="/org" element={<AppShell role="organization" />}>
+        <Route element={<RequireOrganization />}>
+          <Route path="/org" element={<AppShell area="org" />}>
             <Route index element={<OverviewPage />} />
             <Route path="opportunities" element={<MyOpportunitiesPage />} />
             <Route path="opportunities/new" element={<OpportunityEditorPage mode="create" />} />

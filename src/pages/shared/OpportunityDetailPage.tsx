@@ -13,7 +13,7 @@ import { formatDate, formatDateLong, formatHours, plural, timeRange } from '../.
 import { useSession } from '../../store/session'
 import { getOpp, getOrg, oppBucket, oppRegs, recurrenceLabel, registrationClosed, takenSpots } from '../../store/selectors'
 import { deleteOpportunity } from '../../store/actions'
-import { toast } from '../../store/toast'
+import { act } from '../../store/act'
 
 /** Shared detail view: volunteers get registration controls, owning organizations get management actions. */
 export default function OpportunityDetailPage() {
@@ -110,7 +110,7 @@ export default function OpportunityDetailPage() {
                   title="Delete this opportunity?"
                   message={<><strong>{opp.title}</strong> and its {plural(regs.length, 'registration')} will be permanently removed. This can’t be undone.</>}
                   confirmLabel="Delete opportunity"
-                  onConfirm={() => { deleteOpportunity(opp.id); toast('Opportunity deleted.', 'info'); navigate('/org/opportunities') }}
+                  onConfirm={() => { void act(deleteOpportunity(opp.id), 'Opportunity deleted.', 'info').then((ok) => { if (ok) navigate('/org/opportunities') }) }}
                 />
               </div>
             )}

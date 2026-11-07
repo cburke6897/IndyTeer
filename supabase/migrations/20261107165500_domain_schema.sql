@@ -61,7 +61,7 @@ insert into public.users (id, first_name, last_name, full_name, headline, bio, c
   avatar_url, avatar_path, skills, interests, onboarded, created_at, updated_at)
 select p.id,
   split_part(p.full_name, ' ', 1),
-  nullif(trim(substr(p.full_name, length(split_part(p.full_name, ' ', 1)) + 1)), ''),
+  coalesce(nullif(trim(substr(p.full_name, length(split_part(p.full_name, ' ', 1)) + 1)), ''), ''),
   p.full_name, p.headline, p.bio, p.neighborhood, 'IN', p.avatar_url, null,
   p.skills, p.causes, true, p.created_at, p.updated_at
 from public.profiles p;
@@ -92,7 +92,7 @@ create table public.organizations (
 -- Preserve existing opportunity owner IDs by using each legacy organization profile ID
 -- as the migrated organization ID. New organizations receive generated UUIDs.
 insert into public.organizations (id, created_by, name, logo_path, cover_path, website, city, description, mission, focus, created_at, updated_at)
-select p.id, p.id, p.full_name, p.avatar_url, p.banner_url, p.website, p.neighborhood, p.bio, p.headline, p.causes, p.created_at, p.updated_at
+select p.id, p.id, p.full_name, p.avatar_url, p.banner_url, p.website, p.neighborhood, coalesce(p.bio, ''), p.headline, p.causes, p.created_at, p.updated_at
 from public.profiles p
 where p.account_type = 'organization'
    or exists (select 1 from public.opportunities o where o.org_id = p.id);

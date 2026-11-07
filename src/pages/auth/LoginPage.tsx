@@ -34,7 +34,7 @@ export default function LoginPage() {
     try {
       setRememberMe(remember)
       await signIn(email, password)
-      // On success the shared session updates and the route guard redirects by account type.
+      // On success the shared session updates and the route guard sends the user to the standard app (or to onboarding if not finished).
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Login failed. Please try again.'
       if (/email not confirmed/i.test(message)) {

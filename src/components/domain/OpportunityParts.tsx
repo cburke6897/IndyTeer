@@ -9,6 +9,7 @@ import { cn } from '../../lib/utils'
 import { useSession } from '../../store/session'
 import { cancelRegistration, registerForOpportunity, toggleFollow, toggleSave } from '../../store/actions'
 import { getOrg, isFollowing, isSaved, myRegistration, registrationClosed, spotsLeft } from '../../store/selectors'
+import { act } from '../../store/act'
 import { toast } from '../../store/toast'
 import type { Opportunity, OrgProfile, RegStatus } from '../../types'
 
@@ -54,10 +55,7 @@ export function FollowButton({ orgId, size = 'sm' }: { orgId: string; size?: 'sm
       className={following ? '' : 'border border-navy-200'}
       aria-pressed={following}
       icon={following ? <Check size={14} /> : <Plus size={14} />}
-      onClick={() => {
-        const now = toggleFollow(volunteer.id, orgId)
-        toast(now ? `You’re now following ${org?.name}.` : `Unfollowed ${org?.name}.`, now ? 'success' : 'info')
-      }}
+      onClick={() => void act(toggleFollow(orgId), (now) => (now ? `You’re now following ${org?.name}.` : `Unfollowed ${org?.name}.`))}
     >
       {following ? 'Following' : 'Follow'}
     </Button>
@@ -73,7 +71,7 @@ export function SaveButton({ oppId, className }: { oppId: string; className?: st
       aria-pressed={saved}
       aria-label={saved ? 'Remove from saved' : 'Save opportunity'}
       title={saved ? 'Saved' : 'Save for later'}
-      onClick={() => { const now = toggleSave(volunteer.id, oppId); toast(now ? 'Saved to your list.' : 'Removed from saved.', now ? 'success' : 'info') }}
+      onClick={() => void act(toggleSave(oppId), (now) => (now ? 'Saved to your list.' : 'Removed from saved.'))}
       className={cn('inline-flex size-9 items-center justify-center rounded-md border transition-colors', saved ? 'border-gold bg-gold-50 text-gold-700' : 'border-line-strong bg-white text-muted hover:border-navy-200 hover:text-navy', className)}
     >
       <Bookmark size={16} className={saved ? 'fill-gold' : ''} />
@@ -115,8 +113,8 @@ export function RegistrationControl({ opp, block }: { opp: Opportunity; block?: 
   const full = spotsLeft(db, opp) === 0
   const cls = block ? 'w-full' : ''
 
-  function register() {
-    const res = registerForOpportunity(volunteer!.id, opp.id)
+  async function register() {
+    const res = await registerForOpportunity(volunteer!.id, opp.id)
     if (res.ok) toast(`You’re registered for ${opp.title}. The organization will confirm your spot.`)
     else toast(res.error, 'error')
   }
@@ -134,7 +132,7 @@ export function RegistrationControl({ opp, block }: { opp: Opportunity; block?: 
           message={<>You’ll give up your spot for <strong>{opp.title}</strong>. You can register again later if spots remain.</>}
           confirmLabel="Cancel registration"
           cancelLabel="Keep my spot"
-          onConfirm={() => { cancelRegistration(reg.id); toast('Registration canceled.', 'info') }}
+          onConfirm={() => void act(cancelRegistration(reg.id), 'Registration canceled.', 'info')}
         />
       </div>
     )
@@ -142,5 +140,5 @@ export function RegistrationControl({ opp, block }: { opp: Opportunity; block?: 
   if (reg && (reg.status === 'declined' || reg.status === 'removed')) return <RegStatusBadge status={reg.status} />
   if (closed) return <Button size="sm" variant="secondary" disabled className={cls}>Registration closed</Button>
   if (full) return <Button size="sm" variant="secondary" disabled className={cls}>Event full</Button>
-  return <Button size="sm" variant="accent" className={cls} onClick={register}>{reg?.status === 'cancelled' ? 'Register again' : 'Register'}</Button>
+  return <Button size="sm" variant="accent" className={cls} onClick={() => void register()}>{reg?.status === 'cancelled' ? 'Register again' : 'Register'}</Button>
 }

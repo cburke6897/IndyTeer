@@ -37,7 +37,7 @@ export default function OrgProfilePage({ own }: { own?: boolean }) {
       {!own && <button onClick={() => navigate(-1)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-navy-700 hover:underline"><ArrowLeft size={15} /> Back</button>}
       <OrgProfileHeader
         org={org}
-        meta={<span>{followerCount(db, org).toLocaleString()} followers</span>}
+        meta={followerCount(db, org) !== null ? <span>{followerCount(db, org)?.toLocaleString()} followers</span> : undefined}
         actions={isOwner
           ? <Button variant="primary" icon={<Pencil size={15} />} onClick={() => setEditing(true)}>Edit profile</Button>
           : <FollowButton orgId={org.id} size="md" />}

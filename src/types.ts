@@ -1,14 +1,19 @@
-export type AccountType = 'volunteer' | 'organization'
+export type OrgRole = 'owner' | 'admin' | 'member'
 
+/** One of the signed-in user's own organization memberships (public.organization_memberships). */
+export interface Membership {
+  orgId: string
+  role: OrgRole
+  status: 'invited' | 'pending' | 'active' | 'rejected' | 'removed'
+}
+
+/** The standard IndyTeer user. There is no account type: organizations come from memberships. */
 export interface User {
   id: string
   email: string
   firstName: string
   lastName: string
-  accountType: AccountType | null
   onboarded: boolean
-  profileId: string | null
-  demo?: boolean
   createdAt: string
 }
 
@@ -26,7 +31,12 @@ export interface VolunteerProfile {
   skills: string[]
   phone: string
   availability: string
+  /** ISO date the account was created; empty when the viewer cannot see it. */
   joinedAt: string
+  /** What the profile owner has chosen to share (always true for your own profile). */
+  privacy: { showHours: boolean; showHistory: boolean }
+  /** Hours and history exposed to an organization by the database; null when not shared. */
+  shared: { verifiedHours: number | null; history: { oppId: string; status: string; hours: number | null }[] | null } | null
 }
 
 export interface OrgProfile {
@@ -46,7 +56,6 @@ export interface OrgProfile {
   focus: string[]
   verified: boolean
   founded: number
-  followerBoost: number
   color: string
 }
 
@@ -133,16 +142,13 @@ export interface AppNotification {
 export interface Settings {
   notifications: {
     email: boolean
-    reminders: boolean
     newOpportunities: boolean
-    orgUpdates: boolean
     confirmations: boolean
   }
   privacy: {
     publicProfile: boolean
     showHours: boolean
     showHistory: boolean
-    visibility: 'everyone' | 'members' | 'organizations'
   }
 }
 
@@ -158,7 +164,18 @@ export interface DB {
   posts: Post[]
   notifications: AppNotification[]
   settings: Record<string, Settings>
+  /** Spots left per published opportunity id (from the opportunity_availability view). */
+  availability: Record<string, number>
+  /** The signed-in user's own memberships, any status. */
+  memberships: Membership[]
+  /** The organization currently being managed (one of the user's active owner/admin memberships). */
+  activeOrgId: string | null
   sessionUserId: string | null
+  /** True once the first snapshot for the current session has loaded. */
+  ready: boolean
+  /** Identifies the session inputs (profile + memberships) the snapshot was built from. */
+  key: string
+  loadError: string | null
 }
 
 export interface HourEntry {

@@ -14,7 +14,7 @@ import { formatDate, formatHours, todayISO } from '../../lib/utils'
 import { useSession } from '../../store/session'
 import { hourEntries, hourTotals } from '../../store/selectors'
 import { addManualHours, deleteManualHours } from '../../store/actions'
-import { toast } from '../../store/toast'
+import { act } from '../../store/act'
 import type { HourEntry } from '../../types'
 
 export default function MyHoursPage() {
@@ -93,7 +93,7 @@ export default function MyHoursPage() {
         </Card>
       </div>
 
-      <LogHoursModal open={open} onClose={() => setOpen(false)} volunteerId={volunteer!.id} />
+      <LogHoursModal open={open} onClose={() => setOpen(false)} />
       <ConfirmDialog
         open={!!del}
         onClose={() => setDel(null)}
@@ -101,18 +101,18 @@ export default function MyHoursPage() {
         title="Delete this entry?"
         message={<>“{del?.title}” ({del && formatHours(del.hours)} hrs) will be removed from your history.</>}
         confirmLabel="Delete entry"
-        onConfirm={() => { if (!del) return; deleteManualHours(del.id); toast('Entry deleted.', 'info') }}
+        onConfirm={() => { if (!del) return; void act(deleteManualHours(del.id), 'Entry deleted.', 'info') }}
       />
     </div>
   )
 }
 
-function LogHoursModal({ open, onClose, volunteerId }: { open: boolean; onClose: () => void; volunteerId: string }) {
+function LogHoursModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const blank = { orgName: '', title: '', date: todayISO(), hours: '', notes: '' }
   const [f, setF] = useState(blank)
   const [err, setErr] = useState<Record<string, string>>({})
 
-  function submit() {
+  async function submit() {
     const e: Record<string, string> = {}
     if (!f.orgName.trim()) e.orgName = 'Enter the organization.'
     if (!f.title.trim()) e.title = 'Describe what you did.'
@@ -121,8 +121,8 @@ function LogHoursModal({ open, onClose, volunteerId }: { open: boolean; onClose:
     if (!(Number(f.hours) > 0 && Number(f.hours) <= 24)) e.hours = 'Enter hours between 0.5 and 24.'
     setErr(e)
     if (Object.keys(e).length) return
-    addManualHours(volunteerId, { orgName: f.orgName.trim(), title: f.title.trim(), date: f.date, hours: Number(f.hours), notes: f.notes.trim() })
-    toast('Hours logged. They’re pending verification.')
+    const saved = await act(addManualHours({ orgName: f.orgName.trim(), title: f.title.trim(), date: f.date, hours: Number(f.hours), notes: f.notes.trim() }).then(() => true), 'Hours logged. They’re pending verification.')
+    if (!saved) return
     setF(blank)
     onClose()
   }
