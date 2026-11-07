@@ -29,7 +29,7 @@ There is no demo login: sessions come only from Supabase. Seeded organizations a
 ## Setup
 
 1. In Supabase, create a project and copy its Project URL and browser-safe **publishable** key.
-2. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` (the variable name matches the backend; it holds the publishable key). `VITE_SUPABASE_PUBLISHABLE_KEY` still works as a fallback. Never put a secret or `service_role` key in any `VITE_` variable. `.env` and `.env.local` are ignored by Git.
+2. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Never put a secret or `service_role` key in any `VITE_` variable. `.env` and `.env.local` are ignored by Git.
 3. Confirm with the backend owner that every migration in `supabase/migrations/` is applied **and that the `delete-account` function is deployed from this repo's current `supabase/functions/delete-account/index.ts`** (the repo version adds a CORS header the browser needs and refuses to delete shared organizations). The client never creates a missing `users` row; a missing row shows an error screen.
 4. In **Authentication → URL Configuration**, set the Site URL to your local origin (for example `http://localhost:5173` or `http://127.0.0.1:5173`) and allow `<origin>/**` as a redirect URL (this also covers `/reset-password`). Add the production HTTPS origin before deploying.
 5. In **Authentication → Sign In / Providers**, enable Email. Email confirmation can be on or off:

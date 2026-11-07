@@ -10,7 +10,7 @@ The backend teammate owns the Supabase schema, signup trigger, existing-user bac
 
 The feature branch includes main's typed backend data access layer. Use one createClient<Database> instance with PKCE, persistent sessions, token refresh, and auth callback detection.
 
-Configure VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. Put the current browser-safe publishable key in ANON_KEY. The previous VITE_SUPABASE_PUBLISHABLE_KEY is accepted as a fallback; ANON_KEY wins if both are present. .env.local must stay out of Git.
+Configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY with the project's browser-safe publishable key. .env.local must stay out of Git.
 
 ## Signup contract
 
