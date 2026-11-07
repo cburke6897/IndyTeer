@@ -50,7 +50,7 @@ npx supabase functions serve                                  # serve Edge Funct
 npx supabase stop
 ```
 
-`supabase/seed.sql` is a development/staging script with `<..._ID>` placeholders, and automatic seeding is off in `supabase/config.toml` (`[db.seed] enabled = false`). **The linked Supabase project is production and, according to the team's review, already contains the demo seed data.** Never run the seed against it, and review what should be removed from production separately.
+Automatic SQL seeding is disabled. Use `npm run seed:demo` for disposable local demo data; the script refuses hosted Supabase URLs. **The linked Supabase project is production and, according to the team's review, already contains demo data.** Never run local demo setup against production; review production data separately.
 
 ## Scripts
 
@@ -136,7 +136,7 @@ src/
   store/                Client cache (store.ts, sync.ts), actions = database writes (actions.ts), selectors, session hook, toasts
   components/           ui/ primitives · layout/ shell, guards · domain/ cards, tables, charts
   pages/                auth · onboarding · volunteer · org · shared
-supabase/               config.toml, migrations, seed.sql, functions/delete-account
+supabase/               config.toml, migrations, functions/delete-account
 docs/AUTH_MEDIA_INTEGRATION.md   Auth/Media integration contract and status
 ```
 

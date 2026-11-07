@@ -19,7 +19,7 @@ npx supabase db reset --local
 npx supabase status
 ```
 
-`db reset --local` recreates disposable **local** data. Automatic SQL seeds are disabled; historical `supabase/seed.sql` has manual UUID placeholders and is not the recommended seed.
+`db reset --local` recreates disposable **local** data. Automatic SQL seeding is disabled. Use `npm run seed:demo` to create local demo data after configuring `.env.server.local` below.
 
 Create `.env.local` from `.env.example`:
 
