@@ -7,7 +7,7 @@ import { Button } from '../../components/ui/Button'
 import { ImageUpload } from '../../components/ui/ImageUpload'
 import { ConfirmDialog } from '../../components/ui/Modal'
 import { DeleteAccountModal } from '../../components/domain/DeleteAccountModal'
-import { SelectInput, TextInput } from '../../components/ui/Field'
+import { TextInput } from '../../components/ui/Field'
 import { PasswordInput } from '../../components/ui/PasswordInput'
 import { ToggleRow } from '../../components/ui/Toggle'
 import { OrgProfileForm, VolunteerProfileForm } from '../../components/domain/ProfileForms'
@@ -208,16 +208,9 @@ function PrivacySection() {
     <Card>
       <CardHeader title="Privacy" subtitle="Control who can see your information" action={<ShieldCheck size={18} className="text-navy-700" />} />
       <div className="divide-y divide-line px-5">
-        <ToggleRow title={org ? 'Public organization page' : 'Public profile'} description={org ? 'Let volunteers find your page in Organizations.' : 'Allow organizations to view your profile.'} checked={p.publicProfile} onChange={set('publicProfile')} />
+        <ToggleRow title={org ? 'Public organization page' : 'Public profile'} description={org ? 'Let volunteers find your page in Organizations.' : 'Let organizations view your volunteer profile. If off, organizations you have a pending or approved registration with can still view it.'} checked={p.publicProfile} onChange={set('publicProfile')} />
         {!org && <ToggleRow title="Display volunteer hours publicly" description="Show your total verified hours on your profile." checked={p.showHours} onChange={set('showHours')} />}
         {!org && <ToggleRow title="Display volunteer history publicly" description="Show events you’ve volunteered at." checked={p.showHistory} onChange={set('showHistory')} />}
-        <div className="py-4">
-          <SelectInput label="Profile visibility" value={p.visibility} onChange={(e) => set('visibility')(e.target.value as Settings['privacy']['visibility'])} wrapperClassName="max-w-sm">
-            <option value="everyone">Everyone</option>
-            <option value="members">IndyTeer members only</option>
-            <option value="organizations">Organizations I volunteer with</option>
-          </SelectInput>
-        </div>
       </div>
     </Card>
   )
