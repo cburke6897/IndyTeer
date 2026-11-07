@@ -154,3 +154,11 @@ Defined in `src/index.css` (`@theme`): navy `#142C5B`, secondary blue `#244B85`,
 ## Stabilization merge
 
 Main retains its existing pages, routes, organization switcher and per-organization account-deletion decisions. Compatible database/Storage hardening, secure public configuration, background jobs, type generation and CI are merged from `fix/main-stabilization`. The alternate connected screen modules under `src/application` remain available for future integration; they do not replace main routes. [Deployment status and validation](docs/STABILIZATION.md), [environment setup](docs/DEPLOYMENT.md), [Auth & Media integration](docs/AUTH_MEDIA_INTEGRATION.md).
+
+## Public discovery on the homepage
+
+The homepage's **Browse real opportunities** button opens `/discover` inside the main website. Visitors can search, filter by cause/location and follow original signup links **without creating an account or signing in**. This is a native React page using the existing design components, not an iframe or a redirect to another port.
+
+Run the discovery service on loopback port 5188 alongside the normal Vite app. Vite forwards only `/api/discovery/*` to the service's restricted `/api/integration/*` interface. If discovery is down, its page shows a retry/back-home state and the rest of the site continues working. No database migration is needed. Draft management remains an authenticated operation; browsing does not send Auth tokens or cookies to the discovery service.
+
+Production static hosting needs the same-origin API reverse proxy documented in `modules/opportunity-discovery/integration.nginx.conf.example`. Vite's proxy is a development feature and is not embedded in `dist`.

@@ -163,3 +163,51 @@ test('Local service blocks cross-origin mutation, DNS rebinding hosts and missin
     store.close()
   }
 })
+
+test('Native public feed redacts import audits and native controls require a platform administrator', async () => {
+  const store = new Store(':memory:'),
+    local = { ...settings, port: 0 }
+  const row = make()
+  store.upsert(row, 'run')
+  store.reserve(row.id, 'private-org-id', 'private-actor-id')
+  store.imported(row.id, 'private-draft-id')
+  const bridge = {
+    operator: async () => {
+      const e = new Error('Platform administrator required')
+      e.status = 403
+      throw e
+    },
+  }
+  const app = createApp(local, store, {}, { bridge }),
+    server = createServer(app.handler)
+  await new Promise((r) => server.listen(0, '127.0.0.1', r))
+  local.port = server.address().port
+  const base = 'http://127.0.0.1:' + local.port
+  try {
+    const feed = await (await fetch(base + '/api/integration/listings')).json()
+    assert.equal(feed.items.length, 1)
+    assert.equal(feed.items[0].status, 'listed')
+    assert.equal('import' in feed.items[0], false)
+    assert.equal(JSON.stringify(feed).includes('private-actor-id'), false)
+    assert.equal(JSON.stringify(feed).includes('private-draft-id'), false)
+    const boot = await (await fetch(base + '/api/integration/bootstrap')).json()
+    const denied = await fetch(base + '/api/integration/scheduler', {
+      method: 'POST',
+      headers: { 'x-discovery-token': boot.csrf },
+      body: '{"enabled":true}',
+    })
+    assert.equal(denied.status, 403)
+    assert.equal(store.preference('scheduler'), 'false')
+    const escaped = await fetch(base + '/api/integration/%2e%2e/scheduler', {
+      method: 'POST',
+      headers: { 'x-discovery-token': boot.csrf, 'x-indyteer-integration': '1' },
+      body: '{"enabled":true}',
+    })
+    assert.equal(escaped.status, 400)
+    assert.equal(store.preference('scheduler'), 'false')
+  } finally {
+    app.close()
+    await new Promise((r) => server.close(r))
+    store.close()
+  }
+})

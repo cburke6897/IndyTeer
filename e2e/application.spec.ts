@@ -394,3 +394,33 @@ test('main organization route retains the current workspace',async({page})=>{
  await expect(page).toHaveURL(/\/org\/opportunities$/)
  expect(backend.unexpected).toEqual([])
 })
+
+test('Visitors enter discovery from the homepage without logging in and can filter real-shaped listings',async({page})=>{
+ const backend=await api(page)
+ const item={id:'a'.repeat(32),title:'Public farm volunteering',organizer:'Public park organizer',sourceId:'nps-events',sourceUrl:'https://www.nps.gov/example/event',applicationUrl:'https://www.nps.gov/example/signup',date:'2099-11-21',startTime:'09:00',endTime:'12:00',timezone:'America/Chicago',city:'Porter',state:'IN',location:'Public farm',category:'Environment',summary:'Volunteer at the public farm with the original organizer.',observedAt:new Date().toISOString(),reasons:[]}
+ await page.route('**/api/discovery/listings',route=>route.fulfill({json:{items:[item]}}))
+ await page.goto('/')
+ await page.getByRole('link',{name:'Browse real opportunities',exact:true}).click()
+ await expect(page).toHaveURL(/\/discover$/)
+ await expect(page.getByRole('heading',{name:'Real opportunities. No account needed.'})).toBeVisible()
+ await expect(page.getByRole('heading',{name:item.title})).toBeVisible()
+ await expect(page.getByRole('link',{name:'Visit original signup'})).toHaveAttribute('href',item.applicationUrl)
+ await page.getByRole('searchbox').fill('unmatched term')
+ await expect(page.getByRole('heading',{name:'No matching opportunities'})).toBeVisible()
+ await page.getByRole('searchbox').fill('farm')
+ await expect(page.getByRole('heading',{name:item.title})).toBeVisible()
+ await page.setViewportSize({width:390,height:844})
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+ expect(backend.writes.some(w=>w.path==='/auth/v1/token')).toBe(false)
+ expect(backend.unexpected).toEqual([])
+})
+
+test('Discovery service failure stays inside discovery and the main homepage remains usable',async({page})=>{
+ await api(page)
+ await page.route('**/api/discovery/listings',route=>route.fulfill({status:503,body:'Service unavailable'}))
+ await page.goto('/discover')
+ await expect(page.getByRole('heading',{name:'Discovery is taking a break'})).toBeVisible()
+ await expect(page).toHaveURL(/\/discover$/)
+ await page.getByRole('link',{name:'Back to home',exact:true}).first().click()
+ await expect(page.getByRole('heading',{name:'Find your purpose. Make an impact.'})).toBeVisible()
+})

@@ -133,3 +133,23 @@ test('Import reservations serialize callers; source refresh never overwrites an 
     store.close()
   }
 })
+
+test('Integration operator privileges come from the verified database user, not editable Auth metadata', async () => {
+  const store = new Store(':memory:')
+  try {
+    for (const allowed of [false, true]) {
+      const bridge = new Bridge(config, store, async (url) => {
+        const u = new URL(url)
+        if (u.pathname === '/auth/v1/user')
+          return Response.json({ id: 'verified-user', user_metadata: { is_platform_admin: true } })
+        assert.equal(u.searchParams.get('id'), 'eq.verified-user')
+        return Response.json([{ id: 'verified-user', is_platform_admin: allowed }])
+      })
+      if (allowed) assert.equal((await bridge.operator('valid-session')).id, 'verified-user')
+      else await assert.rejects(bridge.operator('valid-session'), (e) => e.status === 403)
+      await assert.rejects(bridge.operator(''), (e) => e.status === 401)
+    }
+  } finally {
+    store.close()
+  }
+})

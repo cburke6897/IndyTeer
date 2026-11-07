@@ -1,6 +1,6 @@
 # IndyTeer Discover
 
-An independent, working discovery and review module for real volunteer opportunities. It runs beside IndyTeer, with its own process, dependency lockfile, SQLite database and browser interface. It changes no main-app routes, packages, tables, migrations, Auth settings, background worker or existing records.
+An independent, working discovery and review module for real volunteer opportunities. It runs beside IndyTeer, with its own process, dependency lockfile, SQLite database and browser interface. The main homepage now provides a public `/discover` entry using native IndyTeer components. Collection remains a separate process and database; it changes no existing tables, migrations, Auth settings, background worker or existing records.
 
 ## Run
 
@@ -88,7 +88,7 @@ npm audit --audit-level=moderate
 npm run export
 ```
 
-23 automated unit/integration tests cover source permission, NPS pagination, recurrence/cancellation, missing facts, stale review, XSS/unsafe links, SSRF/DNS/redirects, robots/429, duplicate leases, draft-only authorization, timeout ambiguity, local origin/CSRF and source changes. Three browser tests cover mobile/search, authorized review/import, original attribution, scheduler pause/dismiss and token non-persistence. Browser import tests use intercepted Auth and a test-only in-memory backend; they do not create production records. Windows uses installed Edge; Linux/macOS require `npx playwright install chromium`.
+25 automated unit/integration tests cover source permission, NPS pagination, recurrence/cancellation, missing facts, stale review, XSS/unsafe links, SSRF/DNS/redirects, robots/429, duplicate leases, draft-only authorization, timeout ambiguity, local origin/CSRF and source changes. Three browser tests cover mobile/search, authorized review/import, original attribution, scheduler pause/dismiss and token non-persistence. Browser import tests use intercepted Auth and a test-only in-memory backend; they do not create production records. Windows uses installed Edge; Linux/macOS require `npx playwright install chromium`.
 
 Live NPS fetching and desktop/mobile rendering were separately verified. **No live Supabase row was imported, changed or deleted for this module.** The main app's unrelated build issues are left to teammates, as requested. The collector and reviewer tests run independently of the root app.
 
@@ -109,3 +109,11 @@ Latest main `a928f2f` was merged into `feat/opportunity-discovery` without confl
 The fully configured main build includes its application bundle and the live landing page loads against the existing shared project; discovery continues independently with its real source queue. A read-only hosted check confirmed migrations through `20261107212000`, invitation decline and the invitation deletion guard. No shared data or schema was modified during this integration check. The main build retains a non-blocking large-chunk warning.
 
 For side-by-side preview when port 5173 is already in use, run the root app with `npm run dev -- --host 127.0.0.1 --port 5174 --strictPort`; discovery stays on 5188. The merge does not mount the independent reviewer inside main's routes. Import still uses the existing authenticated API and requires organizer authorization.
+
+## Native public homepage entry (current integration)
+
+The main homepage now links to `/discover`, a native page in the same website using existing IndyTeer UI components. Browsing, searching, filtering and opening original registration links require **no login**. The public page never creates bookings, drafts or registrations. The prior standalone interface is retained as an optional trusted-operator tool.
+
+Development uses Vite's `/api/discovery/*` proxy to the service's `/api/integration/*` routes. These public feed routes remove import actor IDs, organization/draft IDs and private import journals, suppress cancelled/expired/unreviewable records, and keep source facts/links. Collection, scheduling and shared rejection through the integration API require a database-verified platform administrator. Import/reconciliation retain normal authenticated organization authorization. Proxy path escapes cannot reach the trusted standalone control surface.
+
+For production, configure the narrowly scoped same-origin proxy in `integration.nginx.conf.example`; do not expose the standalone UI or its unrestricted local operator endpoints. A static build without an API proxy shows a recoverable discovery-unavailable state. Existing authentication, registration and other website routes are unaffected. No source collection, database reset or publication was triggered for anonymous access tests.

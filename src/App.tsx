@@ -30,6 +30,7 @@ import OpportunityDetailPage from './pages/shared/OpportunityDetailPage'
 import OrgProfilePage from './pages/shared/OrgProfileView'
 import VolunteerProfilePage from './pages/shared/VolunteerProfileView'
 import SettingsPage from './pages/shared/SettingsPage'
+import PublicDiscoveryPage from './pages/shared/PublicDiscoveryPage'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
@@ -56,6 +57,7 @@ export default function App() {
       <SessionBridge />
       <ScrollToTop />
       <Routes>
+        <Route path="/discover" element={<PublicDiscoveryPage />} />
         <Route element={<PublicOnly />}>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />

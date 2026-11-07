@@ -28,14 +28,40 @@ export class Bridge {
     }
     return body
   }
+  async identity(token) {
+    if (!this.config.supabaseUrl || !this.config.publishableKey)
+      throw new Error('Discovery is not connected to an IndyTeer project.')
+    if (!token || token.length > 10000) {
+      const error = new Error('Sign in to continue.')
+      error.status = 401
+      throw error
+    }
+    const user = await this.request('/auth/v1/user', token)
+    if (!user?.id) throw new Error('Your Auth session could not be verified.')
+    return user
+  }
+  async operator(token) {
+    const user = await this.identity(token)
+    const rows = await this.request(
+      '/rest/v1/users?' +
+        new URLSearchParams({ select: 'id,is_platform_admin', id: `eq.${user.id}` }),
+      token,
+    )
+    if (!Array.isArray(rows) || rows.length !== 1 || rows[0].is_platform_admin !== true) {
+      const error = new Error(
+        'Only a platform administrator can manage discovery sources and collection.',
+      )
+      error.status = 403
+      throw error
+    }
+    return user
+  }
   async session(token) {
     if (!this.config.importsEnabled)
       throw new Error(
         'Draft imports are disabled. Configure the module before connecting an account.',
       )
-    if (!token || token.length > 10000) throw new Error('Sign in to continue.')
-    const user = await this.request('/auth/v1/user', token)
-    if (!user?.id) throw new Error('Your Auth session could not be verified.')
+    const user = await this.identity(token)
     const memberships = await this.request(
       '/rest/v1/organization_memberships?' +
         new URLSearchParams({
@@ -81,7 +107,12 @@ export class Bridge {
         'No unique confirmed result yet. Import stays blocked; inspect the organization drafts before any manual retry.',
       )
     this.store.imported(id, rows[0].id)
-    return { id: rows[0].id, status: rows[0].status, reconciled: true }
+    return {
+      id: rows[0].id,
+      organizationId: journal.organization_id,
+      status: rows[0].status,
+      reconciled: true,
+    }
   }
   async import(id, review, token) {
     const record = this.store.get(id)
@@ -99,17 +130,25 @@ export class Bridge {
         throw new Error(
           'The previous draft is no longer uniquely accessible. No replacement was created.',
         )
-      return { id: rows[0].id, status: rows[0].status, alreadyImported: true }
+      return {
+        id: rows[0].id,
+        organizationId: fields.organizationId,
+        status: rows[0].status,
+        alreadyImported: true,
+      }
     }
-    if (previous)
-      throw new Error(
+    if (previous) {
+      const error = new Error(
         'The previous import is unresolved. Reconcile it instead of creating a duplicate.',
       )
+      error.code = 'IMPORT_UNCERTAIN'
+      throw error
+    }
     const found = await this.find(id, fields.organizationId, token)
     this.store.reserve(id, fields.organizationId, session.userId)
     if (found.length === 1) {
       this.store.imported(id, found[0].id)
-      return { id: found[0].id, alreadyImported: true }
+      return { id: found[0].id, organizationId: fields.organizationId, alreadyImported: true }
     }
     if (found.length > 1) {
       this.store.uncertain(id)
@@ -146,10 +185,17 @@ export class Bridge {
         throw new Error('The server did not confirm a unique draft. Reconcile before retrying.')
       }
       this.store.imported(id, rows[0].id)
-      return { id: rows[0].id, status: rows[0].status || 'draft' }
+      return {
+        id: rows[0].id,
+        organizationId: fields.organizationId,
+        status: rows[0].status || 'draft',
+      }
     } catch (error) {
       if (error.status >= 400 && error.status < 500) this.store.failed(id)
-      else this.store.uncertain(id)
+      else {
+        this.store.uncertain(id)
+        error.code = 'IMPORT_UNCERTAIN'
+      }
       throw error
     }
   }

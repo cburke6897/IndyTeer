@@ -35,9 +35,11 @@ export default function LandingPage() {
             IndyTeer is Indiana’s volunteer network. Discover opportunities near you, track every hour you give, and help nonprofits find the people they need.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
+            <LinkButton to="/discover" variant="secondary" size="lg" icon={<Search size={18} />} className="!border-gold/60 !bg-transparent !text-gold hover:!bg-white/10">Browse real opportunities</LinkButton>
             <LinkButton to="/signup" variant="accent" size="lg" icon={<ArrowRight size={18} />} className="flex-row-reverse">Get started free</LinkButton>
             <LinkButton to="/login" variant="secondary" size="lg" className="!border-white/30 !bg-white/10 !text-white hover:!bg-white/20">Log in</LinkButton>
           </div>
+          <p className="mt-3 text-sm text-white/65">Public discovery is free to browse. No account needed.</p>
           <dl className="mt-14 grid max-w-xl grid-cols-3 gap-6 border-t border-white/15 pt-6">
             {[[String(db.organizations.length), 'Organizations'], [String(openOpps(db).length), 'Open opportunities'], [String(new Set(openOpps(db).map((o) => o.city)).size), 'Indiana cities']].map(([n, l]) => (
               <div key={l}><dt className="text-2xl font-bold text-gold">{n}</dt><dd className="text-xs text-white/65">{l}</dd></div>

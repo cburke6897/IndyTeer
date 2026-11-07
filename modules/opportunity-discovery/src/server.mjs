@@ -8,6 +8,7 @@ import { Store } from './store.mjs'
 import { PoliteHttp } from './http.mjs'
 import { collect } from './collector.mjs'
 import { Bridge } from './bridge.mjs'
+import { ended, today, validDate } from './model.mjs'
 
 export function createApp(settings, store, http, { bridge = new Bridge(settings, store) } = {}) {
   const csrf = randomBytes(32).toString('hex')
@@ -41,8 +42,12 @@ export function createApp(settings, store, http, { bridge = new Bridge(settings,
       return send(403, { error: 'This service is restricted to its local origin.' })
     if (req.headers.origin && !allowed.map((h) => 'http://' + h).includes(req.headers.origin))
       return send(403, { error: 'Cross-origin access is blocked.' })
-    const u = new URL(req.url, 'http://' + host),
-      path = u.pathname
+    const u = new URL(req.url, 'http://' + host)
+    const integration =
+      req.headers['x-indyteer-integration'] === '1' || u.pathname.startsWith('/api/integration/')
+    if (integration && !u.pathname.startsWith('/api/integration/'))
+      return send(400, { error: 'Invalid integration route.' })
+    const path = integration ? u.pathname.replace(/^\/api\/integration\//, '/api/') : u.pathname
     try {
       if (req.method === 'GET' && path === '/api/bootstrap')
         return send(200, {
@@ -57,11 +62,31 @@ export function createApp(settings, store, http, { bridge = new Bridge(settings,
         })
       if (req.method === 'GET' && path === '/api/listings')
         return send(200, {
-          items: store.list({
-            status: u.searchParams.get('status') || '',
-            q: u.searchParams.get('q') || '',
-            state: u.searchParams.get('state') || '',
-          }),
+          items: store
+            .list({
+              status: u.searchParams.get('status') || '',
+              q: u.searchParams.get('q') || '',
+              state: u.searchParams.get('state') || '',
+            })
+            .filter(
+              (row) =>
+                !integration ||
+                (['pending', 'imported'].includes(row.status) &&
+                  !row.cancelled &&
+                  !row.sourceMissing &&
+                  validDate(row.date) &&
+                  row.date >= today(new Date(), row.timezone || undefined) &&
+                  !ended(row.date, row.endTime, row.timezone)),
+            )
+            .map((row) => {
+              if (!integration) return row
+              const { import: audit, duplicateOf, firstSeen, lastSeen, ...facts } = row
+              void audit
+              void duplicateOf
+              void firstSeen
+              void lastSeen
+              return { ...facts, status: 'listed' }
+            }),
         })
       if (req.method === 'GET' && path === '/api/status')
         return send(200, {
@@ -107,6 +132,8 @@ export function createApp(settings, store, http, { bridge = new Bridge(settings,
         return send(400, { error: 'Invalid JSON request.' })
       }
       const token = req.headers.authorization?.replace(/^Bearer /, '') || ''
+      if (integration && ['/api/collect', '/api/scheduler'].includes(path))
+        await bridge.operator(token)
       if (path === '/api/collect') {
         if (running) return send(409, { error: 'A scan is already running.' })
         void scan().catch(() => {
@@ -126,6 +153,7 @@ export function createApp(settings, store, http, { bridge = new Bridge(settings,
         const [, id, action] = match
         if (!store.get(id)) return send(404, { error: 'Listing not found.' })
         if (action === 'reject') {
+          if (integration) await bridge.operator(token)
           store.reject(id)
           return send(200, { rejected: true })
         }
@@ -138,8 +166,9 @@ export function createApp(settings, store, http, { bridge = new Bridge(settings,
       }
       send(404, { error: 'Not found.' })
     } catch (error) {
-      send(error.status === 401 ? 401 : 400, {
+      send([401, 403].includes(error.status) ? error.status : 400, {
         error: String(error.message).replaceAll(settings.npsKey, '[redacted]').slice(0, 300),
+        ...(error.code === 'IMPORT_UNCERTAIN' ? { code: error.code } : {}),
       })
     }
   }

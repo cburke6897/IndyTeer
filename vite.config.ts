@@ -5,11 +5,22 @@ import { defineConfig } from 'vitest/config'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    react(),
-    babel({ presets: [reactCompilerPreset()] }),
-    tailwindcss(),
-  ],
+  server: {
+    proxy: {
+      '/api/discovery': {
+        target: 'http://127.0.0.1:5188',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/discovery(?=\/|$)/, '/api/integration'),
+        configure: (proxy) => {
+          proxy.on('proxyReq', (request) => {
+            request.removeHeader('origin')
+            request.setHeader('x-indyteer-integration', '1')
+          })
+        },
+      },
+    },
+  },
+  plugins: [react(), babel({ presets: [reactCompilerPreset()] }), tailwindcss()],
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
