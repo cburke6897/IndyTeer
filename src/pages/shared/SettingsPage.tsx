@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Bell, Lock, LogOut, ShieldCheck, Trash2, User, UserCog } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Card, CardHeader } from '../../components/ui/Card'
@@ -36,7 +37,12 @@ const sections: { id: Section; label: string; icon: typeof User }[] = [
 
 export default function SettingsPage() {
   const { user } = useSession()
-  const [section, setSection] = useState<Section>('account')
+  const [searchParams] = useSearchParams()
+  const requestedSection = searchParams.get('section')
+  const [section, setSection] = useState<Section>(() => requestedSection === 'notifications' ? 'notifications' : 'account')
+  useEffect(() => {
+    if (requestedSection === 'notifications') setSection('notifications')
+  }, [requestedSection])
   return (
     <div>
       <PageHeader title="Settings" description="Manage your account, profile, notifications, and privacy." />

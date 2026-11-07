@@ -172,7 +172,8 @@ export function mapNotification(n: Tables<'notifications'>): AppNotification {
   else if (n.type === 'follow') link = '/org/volunteers'
   // A join request (has user_id) goes to the admins' People page; everything else about membership goes to the person's own organizations.
   else if (n.type === 'membership' && typeof data.user_id === 'string') link = '/org/people'
-  else if (n.type === 'membership' || n.type === 'membership_invite') link = '/app/organizations'
+  else if (n.type === 'membership_invite') link = '/app/settings?section=notifications'
+  else if (n.type === 'membership') link = '/app/organizations'
   else if (n.type === 'ownership') link = '/org/people'
   else if (n.type === 'hours') link = '/app/hours'
   return { id: n.id, userId: n.user_id, text: n.message, link, read: !!n.read_at, createdAt: n.created_at }
