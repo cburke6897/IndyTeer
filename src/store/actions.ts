@@ -8,6 +8,7 @@ import { markAllNotificationsRead, markNotificationRead as apiMarkRead } from '.
 import { updateSettings as apiUpdateSettings } from '../lib/api/settings'
 import { createOrganizationPost, deletePost as apiDeletePost } from '../lib/api/posts'
 import { updateUser } from '../lib/api/users'
+import * as orgApi from '../lib/api/organizations'
 import {
   cancelRegistration as apiCancel, registerForOpportunity as apiRegister, setRegistrationAttended,
   setRegistrationStatus as apiSetStatus, unverifyRegistrationHours, verifyRegistrationHours,
@@ -17,7 +18,7 @@ import {
 } from '../lib/api/opportunities'
 import { uploadOpportunityImage, uploadOrganizationImage } from '../lib/api/storage'
 import { resetDB, getDB, setDB } from './store'
-import { refresh } from './sync'
+import { refresh, reloadAccount } from './sync'
 import { getOpp, isPast, registrationClosed, spotsLeft } from './selectors'
 
 export { setActiveOrg } from './sync'
@@ -254,4 +255,67 @@ export async function createPost(orgId: string, input: { title: string; body: st
 export async function deletePost(id: string) {
   await apiDeletePost(id)
   await refresh()
+}
+
+/* ------------------------------- Membership -------------------------------- */
+// Joining, leaving and ownership are decided by the database (RPCs). Changes to the person's own
+// memberships reload the account so routing and organization access follow the backend's answer.
+
+const me = () => {
+  const id = getDB().sessionUserId
+  if (!id) throw new Error('Sign in first.')
+  return id
+}
+
+/** Ask to join an organization. Allowed only when its join policy accepts requests. */
+export async function requestToJoin(orgId: string) {
+  await orgApi.requestToJoinOrganization(orgId)
+  await reloadAccount()
+}
+
+/** Withdraw your own pending request, or leave an organization you belong to. */
+export async function leaveOrCancelRequest(orgId: string) {
+  await orgApi.removeOrganizationMember(orgId, me())
+  await reloadAccount()
+}
+
+export async function respondToInvitation(orgId: string, accept: boolean) {
+  if (accept) await orgApi.acceptOrganizationInvite(orgId)
+  else await orgApi.declineOrganizationInvite(orgId)
+  await reloadAccount()
+}
+
+/** Owners and admins: approve or decline a request to join. */
+export async function reviewJoinRequest(orgId: string, userId: string, approve: boolean) {
+  await orgApi.reviewMembershipRequest(orgId, userId, approve)
+  await refresh()
+}
+
+export async function inviteToOrganization(orgId: string, userId: string, role: 'admin' | 'member') {
+  await orgApi.inviteUserToOrganization(orgId, userId, role)
+  await refresh()
+}
+
+export async function changeMemberRole(orgId: string, userId: string, role: 'admin' | 'member') {
+  await orgApi.setOrganizationMemberRole(orgId, userId, role)
+  await refresh()
+}
+
+/** Remove someone else, or cancel an invitation. */
+export async function removeFromOrganization(orgId: string, userId: string) {
+  await orgApi.removeOrganizationMember(orgId, userId)
+  await refresh()
+}
+
+/** Hand ownership to an active member. The caller becomes an admin. */
+export async function transferOwnership(orgId: string, newOwnerId: string) {
+  await orgApi.transferOrganizationOwnership(orgId, newOwnerId)
+  await reloadAccount()
+}
+
+/** Permanently delete an organization (Edge Function; resolves only when the server confirms). */
+export async function deleteOrganization(orgId: string) {
+  await orgApi.deleteOrganization(orgId)
+  await reloadAccount()
+  return true
 }

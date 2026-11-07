@@ -18,7 +18,7 @@ Indiana's volunteer networking platform. Volunteers discover and register for op
 
 **There is no sample data.** The app starts empty: every organization, opportunity, volunteer, registration and hour in it was created by a real user. The client keeps only an in-memory cache of what the signed-in person is allowed to see (`src/store`); Auth sessions and the active-organization preference persist in browser storage; business records do not. An old prototype key in `localStorage` is removed on load. Organizations create data (organizations, opportunities, posts, approvals, attendance, verified hours); volunteers create data (profile, follows, saves, registrations, manual hours); each sees the other's through the database's access rules.
 
-Not built yet: organization membership screens (join requests, invites, roles; ownership transfer exists only inside the delete-account flow), `join_policy` choice (new organizations default to `approval`), post images, and an admin screen for organization verification.
+Not built yet: a `join_policy` choice when creating an organization (new organizations default to `approval`; the policy is shown and respected when someone asks to join), post images, an admin screen for organization verification, and inviting someone who has not made their profile visible (the database offers no lookup by email, so owners find people by name among visible profiles).
 
 ## Team contract
 
@@ -50,7 +50,7 @@ npx supabase functions serve                                  # serve Edge Funct
 npx supabase stop
 ```
 
-`supabase/seed.sql` intentionally aborts until its `<..._ID>` placeholders are replaced with real Auth user ids, so `supabase start` / `db reset` fail at the seed step unless `[db.seed] enabled` is temporarily set to `false` in `supabase/config.toml`.
+`supabase/seed.sql` is a development/staging script with `<..._ID>` placeholders, and automatic seeding is off in `supabase/config.toml` (`[db.seed] enabled = false`). **The linked Supabase project is production and, according to the team's review, already contains the demo seed data.** Never run the seed against it, and review what should be removed from production separately.
 
 ## Scripts
 
@@ -80,6 +80,32 @@ Tests cover the signup/login service, `AuthProvider`, the Supabase client config
 2. Pages read the cache through `useSession()` / `useDB()` and the selectors.
 3. Every change is a function in `src/store/actions.ts`: it writes through `src/lib/api/*` (RLS tables, or an RPC for registrations, attendance, hours, membership), then calls `refresh()`. Handlers use `act()` (`src/store/act.ts`) to show the success or error message. The database decides what is allowed; the UI only hides what a person cannot do.
 4. What an organization sees of a volunteer comes from `get_user_profile_for_organization`, so privacy settings are enforced by the database. Followers are only visible to the organization's own admins.
+
+## Organizations, membership, and invitations
+
+Everything below is a screen over existing backend functions. The membership row the database returns decides what a person sees and which buttons appear; nothing is simulated.
+
+| Workflow | Where | Backend used |
+| --- | --- | --- |
+| Create an organization | `/create-organization` (the original multi-step form) | `create_organization` RPC (the caller becomes `owner`) |
+| Choose / switch the organization being managed | Top left of the sidebar on a laptop; top bar and menu on a phone | memberships (no backend call; remembered per browser) |
+| Ask to join, see pending / accepted / denied, cancel a request | Organization page and "Your organizations and requests" on Organizations | `request_to_join_organization`, `remove_organization_member` (cancel) |
+| Review join requests (owners and admins) | `/org/people`, plus a notification and a count on the People link | `review_membership_request`, `list_organization_members` |
+| Invite someone | `/org/people` (search by name among visible profiles) | `public_users` view, `invite_user_to_organization` |
+| Accept or decline an invitation | Organization page, Organizations, and Settings -> Notifications | `accept_organization_invite`, `decline_organization_invite` |
+| Block future invitations | Settings -> Notifications -> "Block organization invitations" | `user_settings.opt_out_organization_invites`; enforced inside `invite_user_to_organization` |
+| Change roles, remove a member (owner / admin) | `/org/people` | `set_organization_member_role`, `remove_organization_member` |
+| Leave an organization (non-owners, with confirmation) | Organization page, People, and the organization's Settings | `remove_organization_member` |
+| Transfer ownership (confirmation names the new owner) | `/org/people` -> "Make owner…" | `transfer_organization_ownership` |
+| Delete an organization (owners; effects listed first) | Organization Settings | `delete-organization` Edge Function |
+| Delete your account | Settings -> Account | `delete-account` Edge Function (see below) |
+
+Owners cannot leave while they are the owner. Opting out of invitations blocks **new** invitations only: invitations already received stay and can still be accepted or declined.
+
+### Status of the invitation migrations
+
+- `20261107211100_invitation_preferences.sql` (the opt-out column and `decline_organization_invite`): verified present on the linked project by the team's read-only review (local and remote migration histories matched, no pending migrations). Local replay: all database tests pass.
+- That migration rewrote `invite_user_to_organization` from an older version and **dropped the "organization is being deleted" guard** added by `20261107180600`. `20261107212000_restore_invite_deletion_guard.sql` restores it while keeping the opt-out check. A database test fails without it and passes with it. **This restore migration has been verified locally only; it has not been applied to the linked project.**
 
 ## Delete account
 

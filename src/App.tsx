@@ -24,6 +24,7 @@ import MyOpportunitiesPage from './pages/org/MyOpportunitiesPage'
 import OpportunityEditorPage from './pages/org/OpportunityEditorPage'
 import RegistrationsPage from './pages/org/RegistrationsPage'
 import VolunteersPage from './pages/org/VolunteersPage'
+import PeoplePage from './pages/org/PeoplePage'
 import AnalyticsPage from './pages/org/AnalyticsPage'
 import OpportunityDetailPage from './pages/shared/OpportunityDetailPage'
 import OrgProfilePage from './pages/shared/OrgProfileView'
@@ -96,6 +97,7 @@ export default function App() {
             <Route path="opportunities/:id/edit" element={<OpportunityEditorPage mode="edit" />} />
             <Route path="registrations" element={<RegistrationsPage />} />
             <Route path="volunteers" element={<VolunteersPage />} />
+            <Route path="people" element={<PeoplePage />} />
             <Route path="volunteers/:id" element={<VolunteerProfilePage />} />
             <Route path="profile" element={<OrgProfilePage own />} />
             <Route path="analytics" element={<AnalyticsPage />} />

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BarChart3, Bell, Building2, CalendarCheck, Check, ChevronDown, ChevronsUpDown, Clock, Compass, HeartHandshake, LayoutDashboard,
-  ListChecks, LogOut, Menu, PlusCircle, Settings, UserCircle, Users, X, ClipboardList,
+  ListChecks, LogOut, Menu, PlusCircle, Settings, UserCircle, UserCog, Users, X, ClipboardList,
 } from 'lucide-react'
 import { Logo } from '../ui/Logo'
 import { Avatar, OrgLogo } from '../ui/Avatar'
@@ -18,7 +18,7 @@ import { useLogout } from '../../auth/useLogout'
 
 type Area = 'user' | 'org'
 
-interface NavItem { to: string; label: string; icon: ReactNode; end?: boolean }
+interface NavItem { to: string; label: string; icon: ReactNode; end?: boolean; badge?: number }
 
 const iconProps = { size: 18, strokeWidth: 1.9 }
 const volunteerNav: NavItem[] = [
@@ -36,6 +36,7 @@ const orgNav: NavItem[] = [
   { to: '/org/opportunities/new', label: 'Create Opportunity', icon: <PlusCircle {...iconProps} /> },
   { to: '/org/registrations', label: 'Registrations', icon: <ClipboardList {...iconProps} /> },
   { to: '/org/volunteers', label: 'Volunteers', icon: <Users {...iconProps} /> },
+  { to: '/org/people', label: 'People', icon: <UserCog {...iconProps} /> },
   { to: '/org/profile', label: 'Organization Profile', icon: <Building2 {...iconProps} /> },
   { to: '/org/analytics', label: 'Analytics', icon: <BarChart3 {...iconProps} /> },
   { to: '/org/settings', label: 'Settings', icon: <Settings {...iconProps} /> },
@@ -49,10 +50,13 @@ export function AppShell({ area }: { area: Area }) {
     setLastPath(location.pathname)
     setDrawer(false)
   }
-  const nav = area === 'user' ? volunteerNav : orgNav
+  const { db, activeOrg } = useSession()
+  const waiting = activeOrg ? (db.orgPeople[activeOrg.id] ?? []).filter((p) => p.status === 'pending').length : 0
+  const nav = area === 'user' ? volunteerNav : orgNav.map((n) => (n.to === '/org/people' ? { ...n, badge: waiting } : n))
 
   return (
     <div className="min-h-screen bg-surface">
+      <a href="#main-content" className="sr-only z-[60] rounded-md bg-gold px-4 py-3 text-base font-semibold text-navy-950 focus:not-sr-only focus:fixed focus:top-3 focus:left-3">Skip to main content</a>
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-navy lg:flex">
         <SidebarContent nav={nav} area={area} />
@@ -71,7 +75,7 @@ export function AppShell({ area }: { area: Area }) {
 
       <div className="lg:pl-64">
         <Topbar area={area} onMenu={() => setDrawer(true)} />
-        <main className="mx-auto w-full max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[1240px] px-4 py-6 outline-none sm:px-6 lg:px-8 lg:py-8">
           <Outlet />
         </main>
       </div>
@@ -84,16 +88,22 @@ function SidebarContent({ nav, area }: { nav: NavItem[]; area: Area }) {
   const me = sessionVolunteer(db)
   return (
     <>
-      <div className="flex h-16 shrink-0 items-center px-5">
-        <Link to={area === 'user' ? '/app' : '/org'}><Logo light /></Link>
-      </div>
-      <div className="px-3 pb-2">
-        {area === 'org' ? (
-          <div className="pt-2 [&>div>button]:w-full"><OrgSwitcher /></div>
-        ) : (
-          <p className="px-3 pb-2 pt-3 text-[11px] font-semibold tracking-wider text-white/45 uppercase">Volunteering</p>
-        )}
-      </div>
+      {area === 'org' ? (
+        <>
+          {/* The organization being managed is the first thing in the sidebar, top left. */}
+          <div className="shrink-0 px-3 pt-4 [&>div>button]:w-full"><OrgSwitcher /></div>
+          <div className="px-5 pt-3 pb-1"><Link to="/org" aria-label="IndyTeer home"><Logo light /></Link></div>
+        </>
+      ) : (
+        <>
+          <div className="flex h-16 shrink-0 items-center px-5">
+            <Link to="/app" aria-label="IndyTeer home"><Logo light /></Link>
+          </div>
+          <div className="px-3 pb-2">
+            <p className="px-3 pb-2 pt-3 text-xs font-semibold tracking-wider text-white/60 uppercase">Volunteering</p>
+          </div>
+        </>
+      )}
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3" aria-label="Main">
         {nav.map((n) => (
           <NavLink
@@ -108,7 +118,8 @@ function SidebarContent({ nav, area }: { nav: NavItem[]; area: Area }) {
             }
           >
             {n.icon}
-            {n.label}
+            <span className="flex-1">{n.label}</span>
+            {!!n.badge && <span className="rounded-full bg-gold px-2 py-0.5 text-xs font-bold text-navy-950" aria-label={`${n.badge} waiting`}>{n.badge}</span>}
           </NavLink>
         ))}
       </nav>
@@ -143,36 +154,38 @@ function SidebarContent({ nav, area }: { nav: NavItem[]; area: Area }) {
 }
 
 /** Lists the organizations the user manages, switches between them, and offers to create another. */
-function OrgSwitcher({ compact }: { compact?: boolean }) {
+function OrgSwitcher({ compact, variant = 'dark' }: { compact?: boolean; variant?: 'dark' | 'light' }) {
   const { orgs, activeOrg } = useSession()
   const navigate = useNavigate()
   const current = activeOrg ?? orgs[0]
+  const light = variant === 'light'
   return (
     <Dropdown
-      label="Switch organization"
+      label={`Selected organization: ${current?.name ?? 'none'}. Switch organization`}
       align="left"
-      panelClassName="w-64"
+      panelClassName="w-72"
       trigger={() => (
-        <span className={cn('flex w-full items-center gap-3 rounded-lg text-left transition-colors hover:bg-white/10', compact ? 'mt-1.5 bg-white/5 p-2' : 'bg-white/5 p-3')}>
-          {current && <OrgLogo org={current} size="sm" />}
+        <span className={cn('flex w-full items-center gap-3 rounded-lg text-left transition-colors', light ? 'border border-line-strong bg-white p-1.5 pr-2 hover:bg-surface' : compact ? 'mt-1.5 bg-white/5 p-2 hover:bg-white/10' : 'bg-white/10 p-3 hover:bg-white/15')}>
+          {current && <OrgLogo org={current} size={light ? 'sm' : 'md'} />}
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-semibold text-white">{current?.name}</span>
-            <span className="block text-xs text-white/55">{compact ? 'Manage' : orgs.length > 1 ? 'Switch organization' : 'Organization'}</span>
+            <span className={cn('block truncate text-base font-bold', light ? 'text-navy' : 'text-white')}>{current?.name}</span>
+            {!light && <span className="block text-sm text-white/70">{compact ? 'Manage' : orgs.length > 1 ? 'Switch organization' : 'Your organization'}</span>}
           </span>
-          <ChevronsUpDown size={15} className="shrink-0 text-white/60" />
+          <ChevronsUpDown size={16} className={cn('shrink-0', light ? 'text-muted' : 'text-white/70')} aria-hidden="true" />
         </span>
       )}
     >
       {(close) => (
         <>
-          <p className="px-3.5 pb-1 pt-1 text-[11px] font-semibold tracking-wider text-muted uppercase">Your organizations</p>
+          <p className="px-3.5 pb-1 pt-1 text-xs font-semibold tracking-wider text-muted uppercase">Your organizations</p>
           {orgs.map((o) => (
-            <MenuItem key={o.id} icon={o.id === current?.id ? <Check size={15} className="text-navy" /> : <span className="size-[15px]" />} onClick={() => { close(); setActiveOrg(o.id); navigate('/org') }}>
-              <span className="truncate">{o.name}</span>
+            <MenuItem key={o.id} icon={o.id === current?.id ? <Check size={16} className="text-navy" /> : <span className="size-4" />} onClick={() => { close(); setActiveOrg(o.id); navigate('/org') }}>
+              <span className="truncate">{o.name}{o.id === current?.id ? ' (selected)' : ''}</span>
             </MenuItem>
           ))}
           <div className="mt-1 border-t border-line pt-1">
-            <MenuItem icon={<PlusCircle size={15} />} onClick={() => { close(); navigate('/create-organization') }}>Create another organization</MenuItem>
+            <MenuItem icon={<PlusCircle size={16} />} onClick={() => { close(); navigate('/create-organization') }}>Create another organization</MenuItem>
+            <MenuItem icon={<HeartHandshake size={16} />} onClick={() => { close(); navigate('/app') }}>Back to volunteering</MenuItem>
           </div>
         </>
       )}
@@ -185,8 +198,10 @@ function Topbar({ area, onMenu }: { area: Area; onMenu: () => void }) {
   const navigate = useNavigate()
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
-      <button onClick={onMenu} aria-label="Open menu" className="-ml-1 rounded-md p-2 text-navy hover:bg-surface lg:hidden"><Menu size={20} /></button>
-      <Link to={area === 'user' ? '/app' : '/org'} className="lg:hidden"><Logo /></Link>
+      <button onClick={onMenu} className="-ml-1 inline-flex items-center gap-2 rounded-md p-2 text-base font-semibold text-navy hover:bg-surface lg:hidden" aria-label="Open menu"><Menu size={22} /><span className="max-sm:sr-only">Menu</span></button>
+      {area === 'org'
+        ? <div className="min-w-0 max-w-[52%] sm:max-w-sm lg:hidden [&>div]:min-w-0 [&>div>button]:w-full [&>div>button]:min-w-0"><OrgSwitcher variant="light" /></div>
+        : <Link to="/app" className="lg:hidden" aria-label="IndyTeer home"><Logo /></Link>}
       {area === 'user' ? (
         <form
           className="ml-2 hidden max-w-md flex-1 sm:block"
@@ -198,7 +213,7 @@ function Topbar({ area, onMenu }: { area: Area; onMenu: () => void }) {
         <div className="hidden flex-1 sm:block" />
       )}
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
-        {area === 'org' && <LinkButton to="/org/opportunities/new" size="sm" variant="accent" icon={<PlusCircle size={15} />} className="max-sm:hidden">New opportunity</LinkButton>}
+        {area === 'org' && <LinkButton to="/org/opportunities/new" variant="accent" icon={<PlusCircle size={16} />} className="max-sm:hidden">New opportunity</LinkButton>}
         <NotificationsMenu />
         <UserMenu area={area} />
       </div>

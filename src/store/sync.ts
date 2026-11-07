@@ -63,3 +63,18 @@ export function setActiveOrg(orgId: string) {
 export function rememberActiveOrg(userId: string, orgId: string) {
   try { localStorage.setItem(ORG_KEY(userId), orgId) } catch { /* storage unavailable */ }
 }
+
+/**
+ * Changes to the person's own memberships (joining, leaving, accepting an invitation, creating or
+ * deleting an organization) must reload the account, not just the data, because routing and
+ * organization access come from the memberships. SessionBridge registers how.
+ */
+let accountReloader: (() => Promise<void>) | null = null
+export function registerAccountReloader(fn: () => Promise<void>) {
+  accountReloader = fn
+  return () => { if (accountReloader === fn) accountReloader = null }
+}
+export async function reloadAccount(): Promise<void> {
+  if (accountReloader) await accountReloader()
+  else await refresh()
+}

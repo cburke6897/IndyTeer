@@ -3,9 +3,8 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import { ErrorBoundary } from './application/ErrorBoundary'
 const root = createRoot(document.getElementById('root')!)
-const configured =
-  import.meta.env.VITE_SUPABASE_URL &&
-  (import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY)
+// Must match src/lib/supabase.ts, which requires exactly these two variables.
+const configured = import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY
 if (!configured) {
   root.render(
     <main className="mx-auto max-w-2xl space-y-5 p-12">

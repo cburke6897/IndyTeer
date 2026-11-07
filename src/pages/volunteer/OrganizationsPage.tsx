@@ -6,6 +6,7 @@ import { FilterSelect } from '../../components/ui/Field'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Button } from '../../components/ui/Button'
 import { OrgCard } from '../../components/domain/PeopleAndOrgs'
+import { MyOrganizationsPanel } from '../../components/domain/membership'
 import { CATEGORIES } from '../../lib/constants'
 import { plural } from '../../lib/utils'
 import { useSession } from '../../store/session'
@@ -28,6 +29,8 @@ export default function OrganizationsPage() {
   return (
     <div>
       <PageHeader title="Organizations" description="Follow the groups you care about to see their opportunities and updates in your feed." />
+      <MyOrganizationsPanel />
+      <h2 className="mb-3 text-xl">Find organizations</h2>
       <div className="mb-5 flex flex-wrap items-center gap-2.5">
         <SearchInput value={q} onChange={setQ} placeholder="Search organizations" className="w-full sm:w-72" />
         <FilterSelect label="Area of focus" value={focus} onChange={(e) => setFocus(e.target.value)}>

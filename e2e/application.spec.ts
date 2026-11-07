@@ -201,6 +201,18 @@ async function api(page: Page) {
         verified_hours: 0,
         hours_to_verify: 0,
       })
+    if (path === '/rest/v1/rpc/list_organization_members')
+      return json(
+        memberships
+          .filter((m) => m.organization_id === body?.p_organization_id)
+          .map((m) => ({
+            user_id: m.user_id,
+            full_name: m.user_id === userId ? profile.full_name : 'Pending volunteer',
+            avatar_path: null,
+            role: m.role,
+            status: m.status,
+          })),
+      )
     if (path === '/rest/v1/registrations')
       return json(registrations.map((r) => ({ ...r, opportunity: opportunities[0] })))
     if (path === '/rest/v1/opportunity_availability')

@@ -6,6 +6,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { ImageUpload } from '../../components/ui/ImageUpload'
 import { DeleteAccountModal } from '../../components/domain/DeleteAccountModal'
+import { OrganizationDangerZone } from '../../components/domain/OrganizationDangerZone'
 import { TextInput } from '../../components/ui/Field'
 import { PasswordInput } from '../../components/ui/PasswordInput'
 import { ToggleRow } from '../../components/ui/Toggle'
@@ -152,6 +153,7 @@ function AccountSection() {
         </div>
       </Card>
 
+      {org && <OrganizationDangerZone org={org} />}
       {del && <DeleteAccountModal userId={user!.id} onClose={() => setDel(false)} />}
     </>
   )
@@ -228,7 +230,6 @@ function NotificationsSection() {
       <div className="divide-y divide-line px-5">
         <ToggleRow title="Email notifications" description="Receive notifications by email as well as in the app." checked={n.email} onChange={set('email')} />
         <ToggleRow title="New opportunity notifications" description="When organizations you follow post new opportunities." checked={n.newOpportunities} onChange={set('newOpportunities')} />
-        <ToggleRow title="Organization updates" description="News and announcements from organizations you follow." checked={n.orgUpdates} onChange={set('orgUpdates')} />
         <ToggleRow title="Registration updates" description="When a registration is approved, declined, or your hours are verified." checked={n.confirmations} onChange={set('confirmations')} />
         <ToggleRow title="Block organization invitations" description="Stop organizations from sending you new invitations. Existing invitations stay available to accept or decline." checked={inviteOptOut} onChange={toggleInviteOptOut} disabled={!invitePreferenceLoaded || inviteBusy} />
       </div>
