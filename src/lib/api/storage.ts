@@ -12,7 +12,8 @@ function validateImage(file: File): string {
 
 async function upload(bucket: string, path: string, file: File): Promise<string> {
   validateImage(file)
-  const { error } = await db.storage.from(bucket).upload(path, file, { upsert: true, contentType: file.type })
+  // Paths are unique (a fresh UUID each time), so no upsert: upserting needs a SELECT policy that these buckets do not have.
+  const { error } = await db.storage.from(bucket).upload(path, file, { upsert: false, contentType: file.type })
   if (error) throw new Error(error.message)
   return path
 }

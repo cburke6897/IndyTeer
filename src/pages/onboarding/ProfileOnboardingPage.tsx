@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Camera } from 'lucide-react'
 import { OnboardingLayout, Stepper } from './OnboardingLayout'
 import { Card } from '../../components/ui/Card'
@@ -8,7 +8,6 @@ import { ChipSelect } from '../../components/ui/ChipSelect'
 import { ImageUpload } from '../../components/ui/ImageUpload'
 import { SelectInput, TextArea, TextInput } from '../../components/ui/Field'
 import { AVAILABILITY_OPTIONS, CATEGORIES, INDIANA_CITIES, SKILLS } from '../../lib/constants'
-import { completeVolunteerOnboarding } from '../../store/actions'
 import { useSession } from '../../store/session'
 import { toast } from '../../store/toast'
 import { useAvatarUpload } from '../../media/useAvatarUpload'
@@ -20,7 +19,7 @@ import { useTermsConsent } from './useTermsConsent'
 
 const STEPS = ['About you', 'Interests & skills', 'Availability']
 
-export default function VolunteerOnboardingPage() {
+export default function ProfileOnboardingPage() {
   const { user } = useSession()
   const navigate = useNavigate()
   const uploadAvatar = useAvatarUpload()
@@ -31,7 +30,7 @@ export default function VolunteerOnboardingPage() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [f, setF] = useState({
     firstName: user?.firstName ?? '', lastName: user?.lastName ?? '', avatar: null as string | null, city: '', bio: '',
-    interests: [] as string[], skills: [] as string[], phone: '', availability: '',
+    interests: [] as string[], skills: [] as string[], phone: '', availability: '', dob: '',
   })
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }))
 
@@ -47,6 +46,7 @@ export default function VolunteerOnboardingPage() {
       if (!f.interests.length) e.interests = 'Pick at least one area of interest.'
       if (!f.skills.length) e.skills = 'Pick at least one skill.'
     }
+    if (s === 0 && f.dob && f.dob > new Date().toISOString().slice(0, 10)) e.dob = 'Date of birth can’t be in the future.'
     if (s === 2 && f.phone && !/^[\d\s().+-]{7,}$/.test(f.phone)) e.phone = 'Enter a valid phone number or leave this blank.'
     if (s === 2 && consent.needed && !consent.checked) e.terms = 'You need to accept the terms to continue.'
     setErrors(e)
@@ -64,12 +64,11 @@ export default function VolunteerOnboardingPage() {
       // complete_user_onboarding (RPC) saves the profile, records the terms and marks the user onboarded.
       let saved = await finishVolunteerOnboarding(profile, {
         firstName: first, lastName: last, city: f.city, bio: f.bio.trim(), interests: f.interests,
-        skills: f.skills, phone: f.phone.trim(), availability: f.availability,
+        skills: f.skills, phone: f.phone.trim(), availability: f.availability, dateOfBirth: f.dob,
       }, consent.accepted)
       // An already-onboarded row skips the RPC, so keep the display name in step with what was typed.
       if (`${first} ${last}`.trim() !== saved.full_name.trim()) saved = await saveFullName(first, last)
       setProfile(saved)
-      completeVolunteerOnboarding(user.id, { ...f, firstName: first, lastName: last, bio: f.bio.trim() })
       toast('Your volunteer profile is ready. Welcome to IndyTeer!')
       navigate('/app', { replace: true })
     } catch (e) {
@@ -82,8 +81,7 @@ export default function VolunteerOnboardingPage() {
   return (
     <OnboardingLayout>
       <p className="text-sm font-semibold text-navy-700">Step {step + 1} of {STEPS.length}</p>
-      <h1 className="mt-1 mb-6 text-[26px] leading-tight">Set up your volunteer profile</h1>
-      <p className="-mt-3 mb-6 text-sm text-muted">Not the right account type? <Link to="/onboarding/account-type" className="font-semibold text-navy-700 hover:underline">Change it</Link></p>
+      <h1 className="mt-1 mb-6 text-[26px] leading-tight">Set up your profile</h1>
       <Stepper steps={STEPS} current={step} />
 
       <Card className="p-6 sm:p-8">
@@ -101,6 +99,7 @@ export default function VolunteerOnboardingPage() {
               </SelectInput>
               <TextInput label="State" value="Indiana" disabled readOnly />
             </div>
+            <TextInput label="Date of birth" optional type="date" value={f.dob} onChange={(e) => set('dob', e.target.value)} error={errors.dob} hint="Only used to check age requirements. Never shown publicly." />
             <TextArea label="Short bio" placeholder="What motivates you to volunteer? What do you enjoy doing?" value={f.bio} onChange={(e) => set('bio', e.target.value)} error={errors.bio} maxLength={400} hint={`${f.bio.length}/400`} />
           </div>
         )}

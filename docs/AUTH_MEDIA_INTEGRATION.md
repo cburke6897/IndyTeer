@@ -1,6 +1,8 @@
 # Auth and Media integration contract
 
-> **Superseded in part.** The `profiles` / `account_type` model described in the early sections below was replaced by the `public.users` + organization-membership schema (migrations `20261107165500` onward). Signup no longer sends `account_type`; see "Frontend integration status" at the end for the current contract.
+> **Superseded in part. There is no account type any more: everyone is a standard user, and organization access comes from memberships.** Treat any mention below of choosing volunteer or organization as historical.
+>
+> (Earlier note.) The `profiles` / `account_type` model described in the early sections below was replaced by the `public.users` + organization-membership schema (migrations `20261107165500` onward). Signup no longer sends `account_type`; see "Frontend integration status" at the end for the current contract.
 
 ## Ownership
 
@@ -76,11 +78,13 @@ Current (users + organizations schema):
 
 - `AuthProvider` wraps all routes, with `ProfileProvider` + `SessionBridge` inside it. Supabase Auth is the only source of "who is signed in"; the mock `login`, `signup`, `logout`, `loginDemo` actions and demo credentials are gone.
 - Signup (`src/pages/auth/SignupPage.tsx`) calls `signUp(email, password, fullName, extraMetadata?)`. Metadata is `full_name` plus optional `first_name`, `last_name`, `terms_accepted_at`; **no `account_type`**. The trigger creates the `public.users` row from `full_name` / `avatar_url`.
-- After signup the person picks volunteer or organization on `/onboarding/account-type`. This is a local UI choice only: the database has no account type. Volunteers call `complete_user_onboarding`; organizations call `complete_user_onboarding` then `create_organization`, which makes them the owner. Both calls are skipped when already done. `terms_accepted: true` is sent only if the signup form recorded acceptance, otherwise onboarding shows a terms checkbox.
+- After signup everyone goes through the same single onboarding page (`/onboarding`, `complete_user_onboarding`) and lands in the standard app (`/app`). Any onboarded user can later create an organization (`/create-organization`, `create_organization` RPC); the database makes them its owner. `/org/*` is available to users with an active owner/admin membership; the sidebar switcher chooses between several organizations.
 - `useSession()` combines the Auth session, the `users` row, and the user's memberships. A row-load failure shows an error screen (retry / log out) and is never treated as signed out.
 - Avatar uploads use `uploadAvatar` (2 MiB limit) and save `avatar_url` + `avatar_path` on `users`.
 - Display-name edits are written to `users` (`first_name`, `last_name`, `full_name`).
 - Password reset, password change, email change, resend-confirmation, and "remember me" are real.
 - Delete account is real (Edge Function); see `docs/ACCOUNT_DELETION_AND_OWNERSHIP.md`.
 
-Still mock (local store only): volunteer and organization profile content beyond what onboarding sends, opportunities, registrations, hours, follows, notifications, settings, posts. Notable gaps against the database model: no date of birth is collected (needed for `min_age` registration checks), no organization membership/invite UI, no `join_policy` choice (new organizations default to `approval`), organization logos/covers are not uploaded to Storage, and UI registration statuses do not yet map to the database `registration_status`.
+The data layer is real as well: opportunities, registrations, attendance and verified hours, manual hours, follows, saves, posts, notifications, settings, organization profiles and images all read and write Supabase (see the README "Data flow"). The app ships with no sample data.
+
+Known gaps against the database model: the organization membership UI (join requests, invites, roles, ownership transfer), a `join_policy` choice, post images, platform-admin verification, and volunteers' interests/skills are not exposed to organizations by `get_user_profile_for_organization`. Registrations that are declined, removed or cancelled show the volunteer as "Volunteer" to the organization, because that function only shares profiles with pending/approved registrations or public profiles. Replacing an image uploads a new file and leaves the old one in Storage.

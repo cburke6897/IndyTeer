@@ -9,21 +9,32 @@ export const getUser = (db: DB, id: string | null | undefined) => db.users.find(
 export function sessionUser(db: DB): User | null {
   return db.users.find((u) => u.id === db.sessionUserId) ?? null
 }
+/** The standard user's own profile. Available to every user who has finished onboarding. */
 export function sessionVolunteer(db: DB): VolunteerProfile | null {
   const u = sessionUser(db)
-  return u?.accountType === 'volunteer' ? getVolunteer(db, u.profileId) ?? null : null
+  return u?.onboarded ? getVolunteer(db, u.id) ?? null : null
 }
+
+/** Ids of the organizations the user may manage (active owner or admin membership). */
+export function staffOrgIds(db: DB): string[] {
+  return db.memberships.filter((m) => m.status === 'active' && (m.role === 'owner' || m.role === 'admin')).map((m) => m.orgId)
+}
+export function staffOrgs(db: DB): OrgProfile[] {
+  return staffOrgIds(db).map((id) => getOrg(db, id)).filter((o): o is OrgProfile => !!o)
+}
+export function memberRole(db: DB, orgId: string) {
+  return db.memberships.find((m) => m.orgId === orgId && m.status === 'active')?.role ?? null
+}
+
+/** The organization currently being managed, if the user manages any. */
 export function sessionOrg(db: DB): OrgProfile | null {
-  const u = sessionUser(db)
-  return u?.accountType === 'organization' ? getOrg(db, u.profileId) ?? null : null
+  const id = db.activeOrgId
+  return id && staffOrgIds(db).includes(id) ? getOrg(db, id) ?? null : null
 }
 
 export function homePathFor(user: User | null) {
   if (!user) return '/login'
-  // The database has no account type: it is picked during onboarding (and derived afterwards).
-  if (!user.accountType) return '/onboarding/account-type'
-  if (!user.onboarded) return `/onboarding/${user.accountType}`
-  return user.accountType === 'volunteer' ? '/app' : '/org'
+  return user.onboarded ? '/app' : '/onboarding'
 }
 
 /* ------------------------------ Opportunities ------------------------------ */
@@ -49,8 +60,10 @@ export function takenSpots(db: DB, oppId: string) {
   return oppRegs(db, oppId).filter((r) => r.status === 'pending' || r.status === 'approved').length
 }
 
+/** Spots left, from the database's availability view (it counts every registration, not just yours). */
 export function spotsLeft(db: DB, opp: Opportunity) {
-  return Math.max(0, opp.spots - takenSpots(db, opp.id))
+  const known = db.availability[opp.id]
+  return known ?? Math.max(0, opp.spots - takenSpots(db, opp.id))
 }
 
 export function registrationClosed(opp: Opportunity) {
@@ -92,8 +105,9 @@ export function isFollowing(db: DB, volunteerId: string | undefined, orgId: stri
 export function followedOrgs(db: DB, volunteerId: string) {
   return db.follows.filter((f) => f.volunteerId === volunteerId).map((f) => getOrg(db, f.orgId)).filter((o): o is OrgProfile => !!o)
 }
-export function followerCount(db: DB, org: OrgProfile) {
-  return org.followerBoost + db.follows.filter((f) => f.orgId === org.id).length
+/** Followers are only visible to the organization's own administrators (row-level security). */
+export function followerCount(db: DB, org: OrgProfile): number | null {
+  return staffOrgIds(db).includes(org.id) ? db.follows.filter((f) => f.orgId === org.id).length : null
 }
 export function isSaved(db: DB, volunteerId: string | undefined, oppId: string) {
   return !!volunteerId && db.saved.some((s) => s.volunteerId === volunteerId && s.oppId === oppId)
@@ -119,6 +133,19 @@ export function hourEntries(db: DB, volunteerId: string): HourEntry[] {
       status: 'pending' as const, source: 'manual' as const, notes: m.notes,
     }))
   return [...fromEvents, ...manual].sort((a, b) => b.date.localeCompare(a.date))
+}
+
+/** What an organization is shown of another volunteer's history (the database decides what is shared). */
+export function sharedEntries(db: DB, v: VolunteerProfile): HourEntry[] {
+  return (v.shared?.history ?? []).flatMap((h): HourEntry[] => {
+    const opp = getOpp(db, h.oppId)
+    if (!opp || h.status !== 'approved') return []
+    const org = getOrg(db, opp.orgId)
+    return [{
+      id: `${v.id}-${h.oppId}`, volunteerId: v.id, orgId: org?.id ?? null, orgName: org?.name ?? 'Organization', title: opp.title,
+      date: opp.date, hours: h.hours ?? opp.hours, status: h.hours != null ? 'verified' : 'pending', source: 'event',
+    }]
+  }).sort((a, b) => b.date.localeCompare(a.date))
 }
 
 export function hourTotals(entries: HourEntry[]) {

@@ -3,12 +3,13 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 type SessionState = {
-  user: null | { id: string; accountType: 'volunteer' | 'organization' | null; onboarded: boolean }
+  user: null | { id: string; onboarded: boolean }
+  activeOrg: null | { id: string }
   loading: boolean
   profileError: string | null
 }
 const { state, retry } = vi.hoisted(() => ({
-  state: { user: null, loading: false, profileError: null } as SessionState,
+  state: { user: null, activeOrg: null, loading: false, profileError: null } as SessionState,
   retry: vi.fn(),
 }))
 
@@ -17,27 +18,28 @@ vi.mock('../../store/session', () => ({
 }))
 vi.mock('../../auth/useLogout', () => ({ useLogout: () => vi.fn() }))
 
-import { PublicOnly, RequireOnboarding, RequireRole } from './RouteGuards'
+import { PublicOnly, RequireOnboarded, RequireOnboarding, RequireOrganization } from './RouteGuards'
 
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route element={<PublicOnly />}><Route path="/login" element={<p>login page</p>} /></Route>
-        <Route element={<RequireOnboarding />}>
-          <Route path="/onboarding/account-type" element={<p>choose account type</p>} />
-          <Route path="/onboarding/volunteer" element={<p>volunteer onboarding</p>} />
+        <Route element={<RequireOnboarding />}><Route path="/onboarding" element={<p>onboarding</p>} /></Route>
+        <Route element={<RequireOnboarded />}>
+          <Route path="/app" element={<p>standard app</p>} />
+          <Route path="/create-organization" element={<p>create organization</p>} />
         </Route>
-        <Route element={<RequireRole role="volunteer" />}><Route path="/app" element={<p>volunteer app</p>} /></Route>
-        <Route element={<RequireRole role="organization" />}><Route path="/org" element={<p>org app</p>} /></Route>
+        <Route element={<RequireOrganization />}><Route path="/org" element={<p>organization area</p>} /></Route>
       </Routes>
     </MemoryRouter>,
   )
 }
 
-describe('route guards use the real session', () => {
+describe('route guards follow the standard-user model', () => {
   beforeEach(() => {
     state.user = null
+    state.activeOrg = null
     state.loading = false
     state.profileError = null
     retry.mockClear()
@@ -55,35 +57,47 @@ describe('route guards use the real session', () => {
     expect(screen.getByText('login page')).toBeInTheDocument()
   })
 
-  it('shows a profile error (not the login page) for a signed-in user without a profile', () => {
+  it('shows a profile error (not the login page) for a signed-in user without a row', () => {
     state.profileError = 'JSON object requested, multiple (or no) rows returned'
     renderAt('/app')
     expect(screen.getByRole('alert')).toHaveTextContent('multiple (or no) rows')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
-    expect(screen.queryByText('login page')).not.toBeInTheDocument()
   })
 
-  it('sends a signed-in user who has not chosen an account type to the chooser', () => {
-    state.user = { id: 'u1', accountType: null, onboarded: false }
+  it('sends a signed-in user who has not finished onboarding to the single onboarding page', () => {
+    state.user = { id: 'u1', onboarded: false }
     renderAt('/app')
-    expect(screen.getByText('choose account type')).toBeInTheDocument()
+    expect(screen.getByText('onboarding')).toBeInTheDocument()
   })
 
-  it('routes a signed-in, not-yet-onboarded user to onboarding for their account type', () => {
-    state.user = { id: 'u1', accountType: 'volunteer', onboarded: false }
+  it('puts an onboarded user with no organization in the standard app', () => {
+    state.user = { id: 'u1', onboarded: true }
     renderAt('/app')
-    expect(screen.getByText('volunteer onboarding')).toBeInTheDocument()
+    expect(screen.getByText('standard app')).toBeInTheDocument()
   })
 
-  it('keeps volunteers out of the organization area and bounces signed-in users off /login', () => {
-    state.user = { id: 'u1', accountType: 'volunteer', onboarded: true }
-    renderAt('/org')
-    expect(screen.getByText('volunteer app')).toBeInTheDocument()
+  it('lets an onboarded user open the create-organization page', () => {
+    state.user = { id: 'u1', onboarded: true }
+    renderAt('/create-organization')
+    expect(screen.getByText('create organization')).toBeInTheDocument()
   })
 
-  it('lets an onboarded user of the matching type through', () => {
-    state.user = { id: 'u2', accountType: 'organization', onboarded: true }
+  it('keeps users without a managed organization out of the organization area', () => {
+    state.user = { id: 'u1', onboarded: true }
     renderAt('/org')
-    expect(screen.getByText('org app')).toBeInTheDocument()
+    expect(screen.getByText('standard app')).toBeInTheDocument()
+  })
+
+  it('opens the organization area only for a user with a managed organization', () => {
+    state.user = { id: 'u1', onboarded: true }
+    state.activeOrg = { id: 'o1' }
+    renderAt('/org')
+    expect(screen.getByText('organization area')).toBeInTheDocument()
+  })
+
+  it('does not let a not-yet-onboarded user create an organization', () => {
+    state.user = { id: 'u1', onboarded: false }
+    renderAt('/create-organization')
+    expect(screen.getByText('onboarding')).toBeInTheDocument()
   })
 })

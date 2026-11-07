@@ -35,7 +35,7 @@ function durationHours(start: string, end: string) {
 
 export function OpportunityForm({ initial, onSubmit, onCancel }: {
   initial?: Opportunity
-  onSubmit: (values: OpportunityInput) => void
+  onSubmit: (values: OpportunityInput) => void | Promise<void>
   onCancel: () => void
 }) {
   const editing = !!initial

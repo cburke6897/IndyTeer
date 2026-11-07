@@ -14,7 +14,7 @@ import { formatDate, plural, timeRange } from '../../lib/utils'
 import { useSession } from '../../store/session'
 import { oppBucket, oppRegs, orgOpps, recurrenceLabel, takenSpots, type OppBucket } from '../../store/selectors'
 import { deleteOpportunity } from '../../store/actions'
-import { toast } from '../../store/toast'
+import { act } from '../../store/act'
 import type { Opportunity } from '../../types'
 
 const empty: Record<OppBucket, string> = {
@@ -98,7 +98,7 @@ export default function MyOpportunitiesPage() {
         title="Delete this opportunity?"
         message={<><strong>{del?.title}</strong> and its {plural(delCount, 'registration')} will be permanently removed. Volunteers will no longer see it.</>}
         confirmLabel="Delete opportunity"
-        onConfirm={() => { if (!del) return; deleteOpportunity(del.id); toast('Opportunity deleted.', 'info') }}
+        onConfirm={() => { if (!del) return; void act(deleteOpportunity(del.id), 'Opportunity deleted.', 'info') }}
       />
     </div>
   )

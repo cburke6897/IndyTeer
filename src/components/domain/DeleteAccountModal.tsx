@@ -1,32 +1,39 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { TextInput } from '../ui/Field'
 import {
-  DeleteAccountError, deleteAccount, getDeletionImpact,
+  DeleteAccountError, deleteAccount, getDeletionImpact, transferOwnership,
   type DeletionImpact, type OwnedOrganization,
 } from '../../account/deleteAccountService'
 import { deleteAccount as clearLocalAccount } from '../../store/actions'
 import { toast } from '../../store/toast'
 
 type Load = { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; impact: DeletionImpact }
+type Choice = 'transfer' | 'delete'
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`
 
 /**
- * Confirmation flow for permanently deleting the account. It explains the consequences, makes the
- * user choose explicitly about organizations they own, and blocks the flow for organizations with
- * other active members (ownership transfer does not exist yet). It reports success only after the
- * Edge Function confirms the deletion. Mount it only while open so its state resets each time.
+ * Confirmation flow for permanently deleting the account. It explains the consequences and, for each
+ * organization the person solely owns, makes them choose: transfer ownership to another member, or
+ * delete the organization. Organizations that have another owner live on and need no decision. It
+ * reports success only after the Edge Function confirms the deletion. Mount it only while open so its
+ * state resets each time.
  */
 export function DeleteAccountModal({ userId, onClose }: { userId: string; onClose: () => void }) {
   const navigate = useNavigate()
   const [load, setLoad] = useState<Load>({ state: 'loading' })
   const [attempt, setAttempt] = useState(0)
   const [typed, setTyped] = useState('')
-  const [agreed, setAgreed] = useState<Record<string, boolean>>({})
+  const [choice, setChoice] = useState<Record<string, Choice>>({})
+  const [target, setTarget] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
-  const [failure, setFailure] = useState<DeleteAccountError | null>(null)
+  const [failure, setFailure] = useState<{ message: string; kind: 'blocked' | 'incomplete' } | null>(null)
+  const [handedOver, setHandedOver] = useState<string[]>([])
+  const transferred = useRef(new Set<string>())
 
   useEffect(() => {
     let active = true
@@ -39,30 +46,37 @@ export function DeleteAccountModal({ userId, onClose }: { userId: string; onClos
   }, [userId, attempt])
 
   const impact = load.state === 'ready' ? load.impact : null
-  const serverBlocked = failure?.code === 'ORGANIZATION_HAS_MEMBERS' ? failure.organizations : []
-  const shared: OwnedOrganization[] = [
-    ...(impact?.owned.filter((o) => o.otherActiveMembers > 0) ?? []),
-    ...serverBlocked.filter((o) => !impact?.owned.some((x) => x.id === o.id)),
-  ]
-  const solo = impact?.owned.filter((o) => o.otherActiveMembers === 0) ?? []
-  const everySoloChosen = solo.every((o) => agreed[o.id])
-  const canDelete = !!impact && shared.length === 0 && everySoloChosen && typed === 'DELETE' && !busy
+  const needDecision: OwnedOrganization[] = impact?.owned.filter((o) => o.otherOwners === 0) ?? []
+  const livesOn: OwnedOrganization[] = impact?.owned.filter((o) => o.otherOwners > 0) ?? []
+  const decided = needDecision.every((o) => choice[o.id] === 'delete' || (choice[o.id] === 'transfer' && !!target[o.id]))
+  const canDelete = !!impact && decided && typed === 'DELETE' && !busy
 
   async function confirm() {
     if (!canDelete) return
     setBusy(true)
     setFailure(null)
     try {
-      await deleteAccount({ deleteOwnedOrganizations: solo.length > 0 })
+      // 1. Hand over the organizations the person chose to transfer (skipping any done on an earlier try).
+      for (const org of needDecision.filter((o) => choice[o.id] === 'transfer' && !transferred.current.has(o.id))) {
+        try {
+          await transferOwnership(org.id, target[org.id])
+        } catch (cause) {
+          setFailure({ kind: 'blocked', message: `Could not transfer ${org.name}: ${cause instanceof Error ? cause.message : 'try again'}. Your account was not deleted.` })
+          return
+        }
+        transferred.current.add(org.id)
+        setHandedOver([...transferred.current])
+      }
+      // 2. Delete the account. Only the organizations explicitly chosen for deletion are listed.
+      await deleteAccount({ deleteOrganizationIds: needDecision.filter((o) => choice[o.id] === 'delete').map((o) => o.id) })
       // Only now is the account really gone: clear the local copy and leave.
       clearLocalAccount(userId)
       onClose()
       navigate('/login', { replace: true })
       toast('Your account and data were permanently deleted.', 'info')
     } catch (cause) {
-      setFailure(cause instanceof DeleteAccountError
-        ? cause
-        : new DeleteAccountError('Your account deletion did not finish. Try again.', 'incomplete'))
+      const failed = cause instanceof DeleteAccountError ? cause : new DeleteAccountError('Your account deletion did not finish. Try again.', 'incomplete')
+      setFailure({ kind: failed.kind, message: failed.message })
     } finally {
       setBusy(false)
     }
@@ -101,42 +115,68 @@ export function DeleteAccountModal({ userId, onClose }: { userId: string; onClos
           <ul className="list-disc space-y-1 pl-5">
             <li>Your profile, profile photo, registrations, saved opportunities, follows, notifications, and volunteer hours are deleted.</li>
             <li>Your sign-in is deleted. You won’t be able to log in with this email again.</li>
-            {impact.memberOfCount > 0 && <li>You’ll be removed from {impact.memberOfCount} organization{impact.memberOfCount === 1 ? '' : 's'}. Their data stays.</li>}
+            {impact.memberOfCount > 0 && <li>You’ll be removed from {plural(impact.memberOfCount, 'organization', 'organizations')}. Their data stays.</li>}
           </ul>
 
-          {shared.length > 0 && (
-            <div role="alert" className="rounded-md border border-red-200 bg-danger-50 p-3.5">
-              <p className="flex items-center gap-2 font-semibold text-danger"><AlertTriangle size={16} /> Deletion is blocked</p>
-              {shared.map((o) => (
-                <p key={o.id} className="mt-2 text-ink/90">
-                  <strong>{o.name}</strong> has {o.otherActiveMembers} other active member{o.otherActiveMembers === 1 ? '' : 's'}. Ownership can’t be transferred yet, and deleting your account would delete the organization for them too.
-                </p>
-              ))}
-              <p className="mt-2 text-muted">Remove the other members first, or contact the IndyTeer team to arrange a handover. Nothing has been deleted.</p>
-            </div>
+          {livesOn.length > 0 && (
+            <p className="rounded-md bg-navy-50 p-3 text-navy-800">
+              {livesOn.map((o) => o.name).join(', ')} {livesOn.length === 1 ? 'has' : 'have'} another owner and will keep going without you.
+            </p>
           )}
 
-          {solo.length > 0 && shared.length === 0 && (
-            <fieldset className="space-y-2 rounded-md border border-line p-3.5">
-              <legend className="px-1 text-[13px] font-semibold text-ink">Organizations you own</legend>
-              <p className="text-muted">You’re the only member, so these will be deleted along with your account. Confirm each one to continue, or cancel.</p>
-              {solo.map((o) => (
-                <label key={o.id} className="flex cursor-pointer items-start gap-2.5">
-                  <input type="checkbox" checked={!!agreed[o.id]} onChange={(e) => setAgreed({ ...agreed, [o.id]: e.target.checked })} className="mt-0.5 size-4 rounded border-line-strong accent-navy" />
-                  <span>Permanently delete <strong>{o.name}</strong> with all of its opportunities, registrations, posts, and images.</span>
+          {needDecision.map((org) => {
+            const open = choice[org.id]
+            return (
+              <fieldset key={org.id} className="space-y-3 rounded-md border border-line p-3.5">
+                <legend className="px-1 text-[13px] font-semibold text-ink">You own {org.name}</legend>
+                <p className="text-muted">Choose what happens to it. {org.otherActiveMembers > 0 ? `${plural(org.otherActiveMembers, 'other person is', 'other people are')} in this organization.` : 'You’re its only member.'}</p>
+
+                {org.eligible.length > 0 && org.transferAvailable && (
+                  <div>
+                    <label className="flex cursor-pointer items-start gap-2.5">
+                      <input type="radio" name={`org-${org.id}`} checked={open === 'transfer'} onChange={() => setChoice({ ...choice, [org.id]: 'transfer' })} className="mt-0.5 size-4 accent-navy" />
+                      <span><strong>Transfer ownership</strong> to another member. The organization and its data stay.</span>
+                    </label>
+                    {open === 'transfer' && (
+                      <select
+                        aria-label={`New owner of ${org.name}`}
+                        value={target[org.id] ?? ''}
+                        onChange={(e) => setTarget({ ...target, [org.id]: e.target.value })}
+                        className="mt-2 ml-6 h-10 w-[calc(100%-1.5rem)] rounded-md border border-line-strong bg-white px-3 text-sm"
+                      >
+                        <option value="">Choose the new owner</option>
+                        {org.eligible.map((m) => <option key={m.userId} value={m.userId}>{m.name} ({m.role})</option>)}
+                      </select>
+                    )}
+                  </div>
+                )}
+                {org.otherActiveMembers > 0 && org.eligible.length === 0 && org.transferAvailable && (
+                  <p className="text-muted">There’s no other admin or member who can take over.</p>
+                )}
+                {org.otherActiveMembers > 0 && !org.transferAvailable && (
+                  <p className="text-muted">Ownership transfer isn’t available on this server yet, so the only option is to delete it.</p>
+                )}
+
+                <label className="flex cursor-pointer items-start gap-2.5">
+                  <input type="radio" name={`org-${org.id}`} checked={open === 'delete'} onChange={() => setChoice({ ...choice, [org.id]: 'delete' })} className="mt-0.5 size-4 accent-navy" />
+                  <span><strong className="text-danger">Delete {org.name}</strong> with all of its opportunities, registrations, posts, and images{org.otherActiveMembers > 0 ? `, for ${plural(org.otherActiveMembers, 'other member', 'other members')} too` : ''}.</span>
                 </label>
-              ))}
-            </fieldset>
+              </fieldset>
+            )
+          })}
+
+          {handedOver.length > 0 && failure && (
+            <p className="rounded-md bg-navy-50 p-3 text-navy-800">Ownership was already transferred for {handedOver.length === 1 ? 'one organization' : `${handedOver.length} organizations`}. Your account still exists.</p>
           )}
 
-          {failure && failure.code !== 'ORGANIZATION_HAS_MEMBERS' && (
+          {failure && (
             <div role="alert" className="rounded-md border border-red-200 bg-danger-50 p-3.5 text-danger">
               <p className="font-semibold">{failure.kind === 'incomplete' ? 'Deletion did not finish' : 'Your account was not deleted'}</p>
               <p className="mt-1">{failure.message}</p>
             </div>
           )}
 
-          <TextInput label="Type DELETE to confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" disabled={busy || shared.length > 0} />
+          <TextInput label="Type DELETE to confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" disabled={busy} />
         </div>
       )}
     </Modal>

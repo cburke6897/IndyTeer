@@ -27,7 +27,7 @@ function greeting() {
 }
 
 export default function DashboardPage() {
-  const { db, volunteer } = useSession()
+  const { db, volunteer, orgs, activeOrg } = useSession()
   const [tab, setTab] = useState<'all' | 'following'>('all')
   const [category, setCategory] = useState('All')
   const [q, setQ] = useState('')
@@ -94,6 +94,20 @@ export default function DashboardPage() {
           </div>
           <LinkButton to="/app/explore" variant="accent" size="lg" icon={<ArrowRight size={17} />} className="flex-row-reverse">Find opportunities</LinkButton>
         </div>
+      </section>
+
+      {/* Organization entry point: any standard user can create an organization or manage ones they belong to */}
+      <section className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-line bg-white p-5 shadow-card" aria-label="Organizations">
+        <div className="flex items-start gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-gold-50 text-gold-700"><Building2 size={20} /></span>
+          <div>
+            <h2 className="text-base">{orgs.length ? `You manage ${orgs.length === 1 ? orgs[0].name : `${orgs.length} organizations`}` : 'Run a nonprofit, school, or group?'}</h2>
+            <p className="mt-0.5 text-sm text-muted">{orgs.length ? 'Post opportunities, approve registrations, and verify volunteer hours.' : 'Create an organization to post opportunities and manage volunteers. You’ll stay a volunteer too.'}</p>
+          </div>
+        </div>
+        {orgs.length
+          ? <LinkButton to="/org" variant="primary">Open {activeOrg?.name ?? 'organization'}</LinkButton>
+          : <LinkButton to="/create-organization" variant="accent">Create an organization</LinkButton>}
       </section>
 
       {/* Stats */}

@@ -41,6 +41,10 @@ export function useProfile(userId: string | undefined, reloadKey = 0) {
       : previous)
   }, [userId])
 
+  const setMemberships = useCallback((memberships: OrganizationMembership[]) => {
+    setResult((previous) => (previous && previous.userId === userId ? { ...previous, memberships } : previous))
+  }, [userId])
+
   const current = result?.userId === userId ? result : null
   return {
     profile: current?.profile ?? null,
@@ -48,5 +52,6 @@ export function useProfile(userId: string | undefined, reloadKey = 0) {
     error: current?.error ?? null,
     loading: Boolean(userId) && !current,
     setProfile,
+    setMemberships,
   }
 }

@@ -5,30 +5,27 @@ import { OnboardingLayout, Stepper } from './OnboardingLayout'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { ChipSelect } from '../../components/ui/ChipSelect'
-import { ImageUpload } from '../../components/ui/ImageUpload'
 import { SelectInput, TextArea, TextInput } from '../../components/ui/Field'
 import { CATEGORIES, INDIANA_CITIES, ORG_TYPES } from '../../lib/constants'
-import { completeOrgOnboarding } from '../../store/actions'
+import { listMyMemberships } from '../../lib/api/organizations'
 import { useSession } from '../../store/session'
+import { rememberActiveOrg } from '../../store/sync'
 import { toast } from '../../store/toast'
 import { isEmail, normalizeUrl } from '../../lib/utils'
 import { useProfileContext } from '../../auth/useProfileContext'
-import { finishOrganizationSetup } from '../../auth/onboardingService'
-import { TermsConsent } from './TermsConsent'
-import { useTermsConsent } from './useTermsConsent'
+import { createOrganizationForUser } from '../../auth/onboardingService'
 
 const STEPS = ['Organization', 'Mission', 'Contact']
 
 export default function OrgOnboardingPage() {
   const { user } = useSession()
-  const { profile, memberships, setProfile, retry } = useProfileContext()
-  const consent = useTermsConsent()
+  const { profile, setMemberships } = useProfileContext()
   const navigate = useNavigate()
   const [saving, setSaving] = useState(false)
   const [step, setStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [f, setF] = useState({
-    name: '', logo: null as string | null, type: '', city: '', description: '', mission: '', focus: [] as string[],
+    name: '', type: '', city: '', description: '', mission: '', focus: [] as string[],
     website: '', email: user?.email ?? '', phone: '',
   })
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }))
@@ -49,7 +46,6 @@ export default function OrgOnboardingPage() {
       if (!isEmail(f.email.trim())) e.email = 'Enter a valid contact email.'
       if (f.website && !/^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/.*)?$/i.test(f.website.trim())) e.website = 'Enter a valid website, e.g. yourgroup.org'
       if (f.phone && !/^[\d\s().+-]{7,}$/.test(f.phone)) e.phone = 'Enter a valid phone number or leave this blank.'
-      if (consent.needed && !consent.checked) e.terms = 'You need to accept the terms to continue.'
     }
     setErrors(e)
     return Object.keys(e).length === 0
@@ -62,10 +58,11 @@ export default function OrgOnboardingPage() {
     const input = { ...f, name: f.name.trim(), description: f.description.trim(), mission: f.mission.trim(), website: normalizeUrl(f.website.trim()), email: f.email.trim() }
     setSaving(true)
     try {
-      // complete_user_onboarding then create_organization (RPCs): the user becomes the owner.
-      const { organizationId } = await finishOrganizationSetup(profile, memberships, input, consent.accepted, setProfile)
-      completeOrgOnboarding(user.id, input, organizationId)
-      retry()
+      // create_organization (RPC): the database creates the organization and makes the caller its owner.
+      const { organizationId } = await createOrganizationForUser(profile, input)
+      rememberActiveOrg(user.id, organizationId)
+      // Reload the memberships: the new active owner membership is what unlocks organization management.
+      setMemberships(await listMyMemberships())
       toast(`${input.name} is live on IndyTeer.`)
       navigate('/org', { replace: true })
     } catch (e) {
@@ -79,13 +76,13 @@ export default function OrgOnboardingPage() {
     <OnboardingLayout>
       <p className="text-sm font-semibold text-navy-700">Step {step + 1} of {STEPS.length}</p>
       <h1 className="mt-1 mb-6 text-[26px] leading-tight">Set up your organization</h1>
-      <p className="-mt-3 mb-6 text-sm text-muted">Not the right account type? <Link to="/onboarding/account-type" className="font-semibold text-navy-700 hover:underline">Change it</Link></p>
+      <p className="-mt-3 mb-6 text-sm text-muted">You’ll be the owner of this organization. <Link to="/app" className="font-semibold text-navy-700 hover:underline">Back to IndyTeer</Link></p>
       <Stepper steps={STEPS} current={step} />
 
       <Card className="p-6 sm:p-8">
         {step === 0 && (
           <div className="space-y-5">
-            <ImageUpload label="Organization logo" shape="square" value={f.logo} onChange={(v) => set('logo', v)} placeholder={<Building2 size={26} />} hint="Square images work best. You can change this later." />
+            <p className="flex items-center gap-3 rounded-md bg-navy-50 p-3 text-sm text-navy-800"><Building2 size={20} className="shrink-0" /> You can add a logo and cover image from Settings once your organization is created.</p>
             <TextInput label="Organization name" placeholder="e.g. Hoosier Harvest Network" value={f.name} onChange={(e) => set('name', e.target.value)} error={errors.name} />
             <div className="grid gap-4 sm:grid-cols-2">
               <SelectInput label="Organization type" value={f.type} onChange={(e) => set('type', e.target.value)} error={errors.type}>
@@ -113,7 +110,6 @@ export default function OrgOnboardingPage() {
               <TextInput label="Contact email" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} error={errors.email} />
               <TextInput label="Phone number" optional type="tel" placeholder="(317) 555-0100" value={f.phone} onChange={(e) => set('phone', e.target.value)} error={errors.phone} />
             </div>
-            {consent.needed && <TermsConsent checked={consent.checked} onChange={consent.setChecked} error={errors.terms} />}
           </div>
         )}
       </Card>

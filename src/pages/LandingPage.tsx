@@ -36,10 +36,10 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <LinkButton to="/signup" variant="accent" size="lg" icon={<ArrowRight size={18} />} className="flex-row-reverse">Get started free</LinkButton>
-            <LinkButton to="/login" variant="secondary" size="lg" className="!border-white/30 !bg-white/10 !text-white hover:!bg-white/20">Try the demo</LinkButton>
+            <LinkButton to="/login" variant="secondary" size="lg" className="!border-white/30 !bg-white/10 !text-white hover:!bg-white/20">Log in</LinkButton>
           </div>
           <dl className="mt-14 grid max-w-xl grid-cols-3 gap-6 border-t border-white/15 pt-6">
-            {[['12,400+', 'Hours logged'], ['180', 'Organizations'], ['92', 'Indiana counties']].map(([n, l]) => (
+            {[[String(db.organizations.length), 'Organizations'], [String(openOpps(db).length), 'Open opportunities'], [String(new Set(openOpps(db).map((o) => o.city)).size), 'Indiana cities']].map(([n, l]) => (
               <div key={l}><dt className="text-2xl font-bold text-gold">{n}</dt><dd className="text-xs text-white/65">{l}</dd></div>
             ))}
           </dl>
@@ -72,6 +72,7 @@ export default function LandingPage() {
             <h2 className="text-[28px]">Happening across Indiana</h2>
             <Link to="/signup" className="hidden text-sm font-semibold text-navy-700 hover:underline sm:block">See all opportunities</Link>
           </div>
+          {featured.length === 0 && <p className="mt-8 rounded-lg border border-dashed border-line-strong bg-white p-8 text-center text-muted">No opportunities have been posted yet. Organizations that join IndyTeer will appear here.</p>}
           <div className="mt-8 grid gap-5 md:grid-cols-3">
             {featured.map((o) => {
               const org = getOrg(db, o.orgId)

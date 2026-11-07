@@ -13,7 +13,7 @@ import { formatDate, formatHours, plural, timeAgo } from '../../lib/utils'
 import { useSession } from '../../store/session'
 import { getOpp, getVolunteer, orgRegistrations, orgStats, spotsLeft, takenSpots } from '../../store/selectors'
 import { createPost, setRegistrationStatus } from '../../store/actions'
-import { toast } from '../../store/toast'
+import { act } from '../../store/act'
 
 export default function OverviewPage() {
   const { db, org } = useSession()
@@ -61,8 +61,8 @@ export default function OverviewPage() {
                         </div>
                       </div>
                       <div className="flex gap-2">
-                        <Button size="sm" onClick={() => { setRegistrationStatus(r.id, 'approved'); toast(`Approved ${v.firstName}.`) }}>Approve</Button>
-                        <Button size="sm" variant="secondary" onClick={() => { setRegistrationStatus(r.id, 'declined'); toast('Registration declined.', 'info') }}>Decline</Button>
+                        <Button size="sm" onClick={() => void act(setRegistrationStatus(r.id, 'approved'), `Approved ${v.firstName}.`)}>Approve</Button>
+                        <Button size="sm" variant="secondary" onClick={() => void act(setRegistrationStatus(r.id, 'declined'), 'Registration declined.', 'info')}>Decline</Button>
                       </div>
                     </li>
                   )
@@ -136,19 +136,18 @@ function PostUpdateModal({ open, onClose, orgId }: { open: boolean; onClose: () 
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [err, setErr] = useState<Record<string, string>>({})
-  function submit() {
+  async function submit() {
     const e: Record<string, string> = {}
     if (title.trim().length < 3) e.title = 'Add a headline.'
     if (body.trim().length < 10) e.body = 'Write a short update (10+ characters).'
     setErr(e)
     if (Object.keys(e).length) return
-    createPost(orgId, { title: title.trim(), body: body.trim(), image: null })
-    toast('Update posted to your followers’ feeds.')
-    setTitle(''); setBody(''); onClose()
+    const posted = await act(createPost(orgId, { title: title.trim(), body: body.trim() }).then(() => true), 'Update posted to your followers’ feeds.')
+    if (posted) { setTitle(''); setBody(''); onClose() }
   }
   return (
     <Modal open={open} onClose={onClose} title="Post an update" description="Shared with everyone who follows your organization."
-      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={submit}>Post update</Button></>}>
+      footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={() => void submit()}>Post update</Button></>}>
       <div className="space-y-4">
         <TextInput label="Headline" value={title} onChange={(e) => setTitle(e.target.value)} error={err.title} />
         <TextArea label="Update" value={body} onChange={(e) => setBody(e.target.value)} error={err.body} />

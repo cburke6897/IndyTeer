@@ -1,28 +1,50 @@
 import { FunctionsHttpError } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
-import { listMyMemberships, listOrganizationMemberships } from '../lib/api/organizations'
+import {
+  listMyMemberships, listOrganizationMembers, listOrganizationMemberships, transferOrganizationOwnership,
+} from '../lib/api/organizations'
 
 /**
  * Permanent account deletion, done by the `delete-account` Edge Function (service role): it removes
- * the user's Storage objects, deletes organizations they own, then deletes the Auth user (which
- * cascades to public.users and everything keyed to it).
+ * the user's Storage objects, deletes the organizations the user chose to delete, then deletes the
+ * Auth user (which cascades to public.users and everything keyed to it).
  *
- * There is no ownership-transfer workflow in the database yet, so an organization with other active
- * members cannot be handed over. The function refuses to delete such an organization, and the UI
- * blocks the flow up front using the same rule.
+ * A person who solely owns an organization must decide what happens to it first:
+ *  - transfer ownership to another active member (transfer_organization_ownership RPC), or
+ *  - delete the organization and its data.
+ * The function refuses to delete the account until every such organization has been decided, and it
+ * only deletes organizations whose ids the caller lists explicitly.
  */
+
+export interface OrgMemberOption {
+  userId: string
+  name: string
+  role: 'admin' | 'member'
+}
 
 export interface OwnedOrganization {
   id: string
   name: string
-  /** Active members other than the user. Greater than zero blocks deletion. */
+  /** Other active owners. When there are any, the organization lives on and needs no decision. */
+  otherOwners: number
+  /** Active admins and members who could take over (names come from list_organization_members). */
+  eligible: OrgMemberOption[]
+  /** Active people other than the user. Deleting the organization affects all of them. */
   otherActiveMembers: number
+  /** False when the server does not have the ownership-transfer functions yet. */
+  transferAvailable: boolean
 }
 
 export interface DeletionImpact {
   owned: OwnedOrganization[]
   /** Organizations the user belongs to without owning them; they only lose this member. */
   memberOfCount: number
+}
+
+/** The error PostgREST returns when an RPC does not exist (the migration has not been applied). */
+const isMissingFunction = (e: unknown) => {
+  const code = (e as { code?: string })?.code
+  return code === 'PGRST202' || code === '42883' || /could not find the function|schema cache/i.test((e as Error)?.message ?? '')
 }
 
 /** What deleting this account would affect. A preview only: the Edge Function re-checks everything. */
@@ -37,20 +59,41 @@ export async function getDeletionImpact(userId: string): Promise<DeletionImpact>
     if (error) throw new Error(error.message)
     const names = new Map((organizations ?? []).map((o) => [o.id, o.name]))
     for (const id of ids) {
-      // Owners are admins, so RLS lets them read every membership of their organization.
-      const everyone = await listOrganizationMemberships(id)
+      let eligible: OrgMemberOption[] = []
+      let transferAvailable = true
+      let others: { userId: string; role: string }[]
+      try {
+        const people = (await listOrganizationMembers(id)).filter((m) => m.user_id !== userId && m.status === 'active')
+        others = people.map((m) => ({ userId: m.user_id, role: m.role }))
+        eligible = people.filter((m) => m.role !== 'owner').map((m) => ({ userId: m.user_id, name: m.full_name || 'Member', role: m.role as 'admin' | 'member' }))
+      } catch (e) {
+        if (!isMissingFunction(e)) throw e
+        // Older server: ids and roles only, and no way to transfer.
+        transferAvailable = false
+        others = (await listOrganizationMemberships(id)).filter((m) => m.user_id !== userId && m.status === 'active').map((m) => ({ userId: m.user_id, role: m.role }))
+      }
       owned.push({
-        id,
-        name: names.get(id) ?? 'Your organization',
-        otherActiveMembers: everyone.filter((m) => m.user_id !== userId && m.status === 'active').length,
+        id, name: names.get(id) ?? 'Your organization',
+        otherOwners: others.filter((m) => m.role === 'owner').length,
+        eligible, otherActiveMembers: others.length, transferAvailable,
       })
     }
   }
   return { owned, memberOfCount: memberships.length - ownedMemberships.length }
 }
 
+/** Hands an organization to another active member. The previous owner becomes an admin. */
+export async function transferOwnership(organizationId: string, newOwnerId: string): Promise<void> {
+  try {
+    await transferOrganizationOwnership(organizationId, newOwnerId)
+  } catch (e) {
+    if (isMissingFunction(e)) throw new Error('Ownership transfer is not available on this server yet. Delete the organization instead, or ask the IndyTeer team to enable it.', { cause: e })
+    throw e
+  }
+}
+
 export type DeleteFailureKind =
-  /** Refused up front, nothing was removed (shared organization, unconfirmed organization deletion). */
+  /** Refused up front, nothing was removed (an organization still needs a decision). */
   | 'blocked'
   /** The request failed part-way or its outcome is unknown: some data may already be gone. */
   | 'incomplete'
@@ -58,8 +101,8 @@ export type DeleteFailureKind =
 export class DeleteAccountError extends Error {
   kind: DeleteFailureKind
   code: string | null
-  organizations: OwnedOrganization[]
-  constructor(message: string, kind: DeleteFailureKind, code: string | null = null, organizations: OwnedOrganization[] = []) {
+  organizations: { id: string; name: string; otherActiveMembers: number }[]
+  constructor(message: string, kind: DeleteFailureKind, code: string | null = null, organizations: { id: string; name: string; otherActiveMembers: number }[] = []) {
     super(message)
     this.name = 'DeleteAccountError'
     this.kind = kind
@@ -78,14 +121,15 @@ const INCOMPLETE_MESSAGE =
   'Your account deletion did not finish. Some of your files or organizations may already have been removed, and your account may still exist. Try again; if it keeps failing, contact the IndyTeer team.'
 
 /**
- * Calls the Edge Function with the user's own session. Resolves only when the function reports
- * `{ deleted: true }`; any other outcome throws a DeleteAccountError. On success the local session
- * is cleared (the Auth user no longer exists, so a global sign-out would be rejected).
+ * Calls the Edge Function with the user's own session. `deleteOrganizationIds` lists the organizations
+ * the user explicitly chose to delete. Resolves only when the function reports `{ deleted: true }`;
+ * any other outcome throws a DeleteAccountError. On success the local session is cleared (the Auth
+ * user no longer exists, so a global sign-out would be rejected).
  */
-export async function deleteAccount(options: { deleteOwnedOrganizations: boolean }): Promise<void> {
+export async function deleteAccount(options: { deleteOrganizationIds: string[] }): Promise<void> {
   const { data, error } = await supabase.functions.invoke('delete-account', {
     method: 'POST',
-    body: { deleteOwnedOrganizations: options.deleteOwnedOrganizations },
+    body: { deleteOrganizationIds: options.deleteOrganizationIds },
   })
 
   if (error) {

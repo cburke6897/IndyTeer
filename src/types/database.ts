@@ -546,6 +546,11 @@ isOneToOne: true
 "is_platform_admin":
 { Args: Record<PropertyKey, never>; Returns: boolean
                            },
+"list_organization_members":
+{ Args: { "p_organization_id": string }; Returns: {
+              "avatar_path": string,"full_name": string,"role": Database["public"]['Enums']["organization_role"],"status": Database["public"]['Enums']["membership_status"],"user_id": string
+            }[]
+                           },
 "mark_all_notifications_read":
 { Args: Record<PropertyKey, never>; Returns: undefined
                            },
@@ -699,6 +704,22 @@ isOneToOne: true
                           SetofOptions: {
         from: "*"
         to: "registrations"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"transfer_organization_ownership":
+{ Args: { "p_new_owner": string,"p_organization_id": string }; Returns: {
+              "created_at": string,
+"invited_by": string | null,
+"organization_id": string,
+"role": Database["public"]['Enums']["organization_role"],
+"status": Database["public"]['Enums']["membership_status"],
+"updated_at": string,
+"user_id": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "organization_memberships"
         isOneToOne: true
         isSetofReturn: false
       } },

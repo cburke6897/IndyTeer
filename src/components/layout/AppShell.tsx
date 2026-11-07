@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
-  BarChart3, Bell, Building2, CalendarCheck, ChevronDown, Clock, Compass, LayoutDashboard, ListChecks, LogOut, Menu,
-  PlusCircle, Settings, UserCircle, Users, X, ClipboardList,
+  BarChart3, Bell, Building2, CalendarCheck, Check, ChevronDown, ChevronsUpDown, Clock, Compass, HeartHandshake, LayoutDashboard,
+  ListChecks, LogOut, Menu, PlusCircle, Settings, UserCircle, Users, X, ClipboardList,
 } from 'lucide-react'
 import { Logo } from '../ui/Logo'
 import { Avatar, OrgLogo } from '../ui/Avatar'
@@ -11,9 +11,12 @@ import { SearchInput } from '../ui/SearchInput'
 import { LinkButton } from '../ui/Button'
 import { cn, timeAgo } from '../../lib/utils'
 import { useSession } from '../../store/session'
-import { markNotificationRead, markNotificationsRead } from '../../store/actions'
+import { markNotificationRead, markNotificationsRead, setActiveOrg } from '../../store/actions'
+import { memberRole, sessionVolunteer } from '../../store/selectors'
+import { act } from '../../store/act'
 import { useLogout } from '../../auth/useLogout'
-import type { AccountType } from '../../types'
+
+type Area = 'user' | 'org'
 
 interface NavItem { to: string; label: string; icon: ReactNode; end?: boolean }
 
@@ -38,7 +41,7 @@ const orgNav: NavItem[] = [
   { to: '/org/settings', label: 'Settings', icon: <Settings {...iconProps} /> },
 ]
 
-export function AppShell({ role }: { role: AccountType }) {
+export function AppShell({ area }: { area: Area }) {
   const [drawer, setDrawer] = useState(false)
   const location = useLocation()
   const [lastPath, setLastPath] = useState(location.pathname)
@@ -46,13 +49,13 @@ export function AppShell({ role }: { role: AccountType }) {
     setLastPath(location.pathname)
     setDrawer(false)
   }
-  const nav = role === 'volunteer' ? volunteerNav : orgNav
+  const nav = area === 'user' ? volunteerNav : orgNav
 
   return (
     <div className="min-h-screen bg-surface">
       {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-navy lg:flex">
-        <SidebarContent nav={nav} role={role} />
+        <SidebarContent nav={nav} area={area} />
       </aside>
 
       {/* Mobile drawer */}
@@ -61,13 +64,13 @@ export function AppShell({ role }: { role: AccountType }) {
           <div className="absolute inset-0 animate-fade-in bg-navy-950/55" onClick={() => setDrawer(false)} />
           <aside className="relative flex h-full w-72 max-w-[85%] animate-fade-in flex-col bg-navy">
             <button onClick={() => setDrawer(false)} aria-label="Close menu" className="absolute top-4 right-3 rounded p-1 text-white/70 hover:text-white"><X size={20} /></button>
-            <SidebarContent nav={nav} role={role} />
+            <SidebarContent nav={nav} area={area} />
           </aside>
         </div>
       )}
 
       <div className="lg:pl-64">
-        <Topbar role={role} onMenu={() => setDrawer(true)} />
+        <Topbar area={area} onMenu={() => setDrawer(true)} />
         <main className="mx-auto w-full max-w-[1240px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <Outlet />
         </main>
@@ -76,17 +79,20 @@ export function AppShell({ role }: { role: AccountType }) {
   )
 }
 
-function SidebarContent({ nav, role }: { nav: NavItem[]; role: AccountType }) {
-  const { org, volunteer } = useSession()
+function SidebarContent({ nav, area }: { nav: NavItem[]; area: Area }) {
+  const { db, orgs } = useSession()
+  const me = sessionVolunteer(db)
   return (
     <>
       <div className="flex h-16 shrink-0 items-center px-5">
-        <Link to={role === 'volunteer' ? '/app' : '/org'}><Logo light /></Link>
+        <Link to={area === 'user' ? '/app' : '/org'}><Logo light /></Link>
       </div>
       <div className="px-3 pb-2">
-        <p className="px-3 pb-2 pt-3 text-[11px] font-semibold tracking-wider text-white/45 uppercase">
-          {role === 'volunteer' ? 'Volunteer' : 'Organization'} workspace
-        </p>
+        {area === 'org' ? (
+          <div className="pt-2 [&>div>button]:w-full"><OrgSwitcher /></div>
+        ) : (
+          <p className="px-3 pb-2 pt-3 text-[11px] font-semibold tracking-wider text-white/45 uppercase">Volunteering</p>
+        )}
       </div>
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3" aria-label="Main">
         {nav.map((n) => (
@@ -106,10 +112,29 @@ function SidebarContent({ nav, role }: { nav: NavItem[]; role: AccountType }) {
           </NavLink>
         ))}
       </nav>
+      {area === 'user' && (
+        <div className="mx-3 mb-3 rounded-lg border border-white/10 bg-white/5 p-3">
+          {orgs.length === 0 ? (
+            <>
+              <p className="flex items-center gap-2 text-[13px] font-semibold text-white"><Building2 size={15} className="text-gold" /> Run an organization?</p>
+              <p className="mt-1 text-xs leading-snug text-white/60">Create one to post opportunities and manage volunteers.</p>
+              <LinkButton to="/create-organization" size="sm" variant="accent" className="mt-2.5 w-full">Create organization</LinkButton>
+            </>
+          ) : (
+            <>
+              <p className="text-[11px] font-semibold tracking-wider text-white/45 uppercase">Your organizations</p>
+              <div className="[&>div>button]:w-full"><OrgSwitcher compact /></div>
+            </>
+          )}
+        </div>
+      )}
+      {area === 'org' && (
+        <Link to="/app" className="mx-3 mb-2 flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-white/70 hover:bg-white/5 hover:text-white"><HeartHandshake size={17} /> Back to volunteering</Link>
+      )}
       <div className="m-3 flex items-center gap-3 rounded-lg bg-white/5 p-3">
-        {role === 'volunteer' && volunteer ? <Avatar person={volunteer} size="sm" /> : org ? <OrgLogo org={org} size="sm" /> : null}
+        {me ? <Avatar person={me} size="sm" /> : null}
         <div className="min-w-0">
-          <p className="truncate text-[13px] font-semibold text-white">{role === 'volunteer' ? `${volunteer?.firstName} ${volunteer?.lastName}` : org?.name}</p>
+          <p className="truncate text-[13px] font-semibold text-white">{me ? `${me.firstName} ${me.lastName}` : ''}</p>
           <p className="truncate text-xs text-white/55">Indiana, USA</p>
         </div>
       </div>
@@ -117,14 +142,52 @@ function SidebarContent({ nav, role }: { nav: NavItem[]; role: AccountType }) {
   )
 }
 
-function Topbar({ role, onMenu }: { role: AccountType; onMenu: () => void }) {
+/** Lists the organizations the user manages, switches between them, and offers to create another. */
+function OrgSwitcher({ compact }: { compact?: boolean }) {
+  const { orgs, activeOrg } = useSession()
+  const navigate = useNavigate()
+  const current = activeOrg ?? orgs[0]
+  return (
+    <Dropdown
+      label="Switch organization"
+      align="left"
+      panelClassName="w-64"
+      trigger={() => (
+        <span className={cn('flex w-full items-center gap-3 rounded-lg text-left transition-colors hover:bg-white/10', compact ? 'mt-1.5 bg-white/5 p-2' : 'bg-white/5 p-3')}>
+          {current && <OrgLogo org={current} size="sm" />}
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-semibold text-white">{current?.name}</span>
+            <span className="block text-xs text-white/55">{compact ? 'Manage' : orgs.length > 1 ? 'Switch organization' : 'Organization'}</span>
+          </span>
+          <ChevronsUpDown size={15} className="shrink-0 text-white/60" />
+        </span>
+      )}
+    >
+      {(close) => (
+        <>
+          <p className="px-3.5 pb-1 pt-1 text-[11px] font-semibold tracking-wider text-muted uppercase">Your organizations</p>
+          {orgs.map((o) => (
+            <MenuItem key={o.id} icon={o.id === current?.id ? <Check size={15} className="text-navy" /> : <span className="size-[15px]" />} onClick={() => { close(); setActiveOrg(o.id); navigate('/org') }}>
+              <span className="truncate">{o.name}</span>
+            </MenuItem>
+          ))}
+          <div className="mt-1 border-t border-line pt-1">
+            <MenuItem icon={<PlusCircle size={15} />} onClick={() => { close(); navigate('/create-organization') }}>Create another organization</MenuItem>
+          </div>
+        </>
+      )}
+    </Dropdown>
+  )
+}
+
+function Topbar({ area, onMenu }: { area: Area; onMenu: () => void }) {
   const [q, setQ] = useState('')
   const navigate = useNavigate()
   return (
     <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-line bg-white/95 px-4 backdrop-blur sm:px-6 lg:px-8">
       <button onClick={onMenu} aria-label="Open menu" className="-ml-1 rounded-md p-2 text-navy hover:bg-surface lg:hidden"><Menu size={20} /></button>
-      <Link to={role === 'volunteer' ? '/app' : '/org'} className="lg:hidden"><Logo /></Link>
-      {role === 'volunteer' ? (
+      <Link to={area === 'user' ? '/app' : '/org'} className="lg:hidden"><Logo /></Link>
+      {area === 'user' ? (
         <form
           className="ml-2 hidden max-w-md flex-1 sm:block"
           onSubmit={(e) => { e.preventDefault(); navigate(`/app/explore${q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''}`); setQ('') }}
@@ -135,9 +198,9 @@ function Topbar({ role, onMenu }: { role: AccountType; onMenu: () => void }) {
         <div className="hidden flex-1 sm:block" />
       )}
       <div className="ml-auto flex items-center gap-2 sm:gap-3">
-        {role === 'organization' && <LinkButton to="/org/opportunities/new" size="sm" variant="accent" icon={<PlusCircle size={15} />} className="max-sm:hidden">New opportunity</LinkButton>}
+        {area === 'org' && <LinkButton to="/org/opportunities/new" size="sm" variant="accent" icon={<PlusCircle size={15} />} className="max-sm:hidden">New opportunity</LinkButton>}
         <NotificationsMenu />
-        <UserMenu role={role} />
+        <UserMenu area={area} />
       </div>
     </header>
   )
@@ -164,14 +227,14 @@ function NotificationsMenu() {
         <div>
           <div className="flex items-center justify-between border-b border-line px-4 py-3">
             <p className="text-sm font-bold text-navy">Notifications</p>
-            {unread > 0 && <button onClick={() => markNotificationsRead(user.id)} className="text-xs font-semibold text-navy-700 hover:underline">Mark all read</button>}
+            {unread > 0 && <button onClick={() => void act(markNotificationsRead())} className="text-xs font-semibold text-navy-700 hover:underline">Mark all read</button>}
           </div>
           <div className="max-h-80 overflow-y-auto">
             {mine.length === 0 && <p className="px-4 py-8 text-center text-sm text-muted">You’re all caught up.</p>}
             {mine.slice(0, 12).map((n) => (
               <button
                 key={n.id}
-                onClick={() => { markNotificationRead(n.id); close(); if (n.link) navigate(n.link) }}
+                onClick={() => { void act(markNotificationRead(n.id)); close(); if (n.link) navigate(n.link) }}
                 className={cn('flex w-full gap-3 border-b border-line px-4 py-3 text-left last:border-0 hover:bg-surface', !n.read && 'bg-gold-50/50')}
               >
                 <span className={cn('mt-1.5 size-2 shrink-0 rounded-full', n.read ? 'bg-transparent' : 'bg-gold-600')} />
@@ -188,19 +251,22 @@ function NotificationsMenu() {
   )
 }
 
-function UserMenu({ role }: { role: AccountType }) {
-  const { volunteer, org, user } = useSession()
+function UserMenu({ area }: { area: Area }) {
+  const { db, user, orgs, activeOrg } = useSession()
+  const me = sessionVolunteer(db)
   const navigate = useNavigate()
   const logout = useLogout()
-  const base = role === 'volunteer' ? '/app' : '/org'
-  const name = role === 'volunteer' ? `${volunteer?.firstName ?? ''} ${volunteer?.lastName ?? ''}` : org?.name ?? ''
+  const inOrg = area === 'org' && !!activeOrg
+  const base = inOrg ? '/org' : '/app'
+  const name = me ? `${me.firstName} ${me.lastName}` : ''
+  const role = activeOrg ? memberRole(db, activeOrg.id) : null
   return (
     <Dropdown
       label="Account menu"
-      panelClassName="w-60"
+      panelClassName="w-64"
       trigger={() => (
         <span className="flex items-center gap-2 rounded-md py-1 pr-1.5 pl-1 transition-colors hover:bg-surface">
-          {role === 'volunteer' && volunteer ? <Avatar person={volunteer} size="sm" /> : org ? <OrgLogo org={org} size="sm" /> : null}
+          {inOrg && activeOrg ? <OrgLogo org={activeOrg} size="sm" /> : me ? <Avatar person={me} size="sm" /> : null}
           <ChevronDown size={14} className="text-muted" />
         </span>
       )}
@@ -210,11 +276,18 @@ function UserMenu({ role }: { role: AccountType }) {
           <div className="border-b border-line px-3.5 pb-3 pt-2">
             <p className="truncate text-sm font-bold text-navy">{name}</p>
             <p className="truncate text-xs text-muted">{user?.email}</p>
-            <p className="mt-1.5 inline-block rounded bg-gold-50 px-1.5 text-[11px] font-semibold text-gold-700">{role === 'volunteer' ? 'Volunteer account' : 'Organization account'}</p>
+            {inOrg && activeOrg && <p className="mt-1.5 inline-block max-w-full truncate rounded bg-gold-50 px-1.5 text-[11px] font-semibold text-gold-700">{role ? role.charAt(0).toUpperCase() + role.slice(1) : 'Member'} of {activeOrg.name}</p>}
           </div>
           <div className="py-1">
-            <MenuItem icon={<UserCircle size={16} />} onClick={() => { close(); navigate(role === 'volunteer' ? '/app/profile' : '/org/profile') }}>{role === 'volunteer' ? 'My profile' : 'Organization profile'}</MenuItem>
+            <MenuItem icon={<UserCircle size={16} />} onClick={() => { close(); navigate(inOrg ? '/org/profile' : '/app/profile') }}>{inOrg ? 'Organization profile' : 'My profile'}</MenuItem>
             <MenuItem icon={<Settings size={16} />} onClick={() => { close(); navigate(`${base}/settings`) }}>Settings</MenuItem>
+          </div>
+          <div className="border-t border-line py-1">
+            {inOrg
+              ? <MenuItem icon={<HeartHandshake size={16} />} onClick={() => { close(); navigate('/app') }}>Back to volunteering</MenuItem>
+              : orgs.length > 0
+                ? <MenuItem icon={<Building2 size={16} />} onClick={() => { close(); navigate('/org') }}>Manage {activeOrg?.name ?? 'organization'}</MenuItem>
+                : <MenuItem icon={<PlusCircle size={16} />} onClick={() => { close(); navigate('/create-organization') }}>Create an organization</MenuItem>}
           </div>
           <div className="border-t border-line pt-1">
             <MenuItem icon={<LogOut size={16} />} onClick={() => { close(); void logout() }}>Log out</MenuItem>

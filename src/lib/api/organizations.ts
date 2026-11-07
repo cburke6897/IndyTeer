@@ -120,3 +120,19 @@ export async function getOrganizationOverview(organizationId: string) {
   if (error) throw new Error(error.message)
   return data as Record<string, unknown>
 }
+
+export type OrganizationMemberRow = { user_id: string; full_name: string; avatar_path: string | null; role: OrganizationRole; status: string }
+
+/** Names and roles of an organization's people. Admins only (the users table itself is private). */
+export async function listOrganizationMembers(organizationId: string): Promise<OrganizationMemberRow[]> {
+  const { data, error } = await db.rpc('list_organization_members', { p_organization_id: organizationId })
+  if (error) throw Object.assign(new Error(error.message), { code: error.code })
+  return data as OrganizationMemberRow[]
+}
+
+/** Hands ownership to an active member; the previous owner becomes an admin. Owners only. */
+export async function transferOrganizationOwnership(organizationId: string, newOwnerId: string): Promise<OrganizationMembership> {
+  const { data, error } = await db.rpc('transfer_organization_ownership', { p_organization_id: organizationId, p_new_owner: newOwnerId })
+  if (error) throw Object.assign(new Error(error.message), { code: error.code })
+  return data as OrganizationMembership
+}

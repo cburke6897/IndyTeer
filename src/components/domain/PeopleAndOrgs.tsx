@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { Mail, MapPin, Phone } from 'lucide-react'
+import { MapPin, Phone } from 'lucide-react'
 import { Avatar, OrgLogo, SafeImage } from '../ui/Avatar'
 import { Badge, VerifiedMark } from '../ui/Badge'
 import { Card } from '../ui/Card'
@@ -32,7 +32,7 @@ export function OrgCard({ org }: { org: OrgProfile }) {
         <div className="mt-auto flex items-center justify-between gap-2 pt-5">
           <div className="text-xs text-muted">
             <p className="font-semibold text-navy">{plural(active, 'active opportunity', 'active opportunities')}</p>
-            <p>{followerCount(db, org).toLocaleString()} followers</p>
+            {followerCount(db, org) !== null && <p>{followerCount(db, org)?.toLocaleString()} followers</p>}
           </div>
           <FollowButton orgId={org.id} size="md" />
         </div>
@@ -59,7 +59,6 @@ export function VolunteerCard({ volunteer, hours, events, extra, actions }: {
         <div><dd className="text-lg font-bold text-navy">{events}</dd><dt className="text-xs text-muted">Events attended</dt></div>
       </dl>
       <div className="mt-3 space-y-1 text-[13px] text-muted">
-        <p className="flex items-center gap-2"><Mail size={13} className="shrink-0" /><span className="truncate">{volunteer.firstName.toLowerCase()}.{volunteer.lastName.toLowerCase()}@example.com</span></p>
         {volunteer.phone && <p className="flex items-center gap-2"><Phone size={13} className="shrink-0" />{volunteer.phone}</p>}
       </div>
       {extra}
