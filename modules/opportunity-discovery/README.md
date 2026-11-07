@@ -101,3 +101,11 @@ Live NPS fetching and desktop/mobile rendering were separately verified. **No li
 - [robots-parser documentation](https://github.com/samclarke/robots-parser).
 
 Source permission is an operational review record, not a blanket legal guarantee. Recheck changes in terms and third-party rights before enabling or expanding a source.
+
+## Main integration check — 2026-11-07
+
+Latest main `a928f2f` was merged into `feat/opportunity-discovery` without conflicts. No main-app source changes were needed. The main application's lint/build, 108 frontend tests, 32 database tests, 3 configuration checks, 10 Edge tests/typechecks and 4 browser tests passed. Discovery's 23 automated tests and 3 browser tests also passed (183 combined).
+
+The fully configured main build includes its application bundle and the live landing page loads against the existing shared project; discovery continues independently with its real source queue. A read-only hosted check confirmed migrations through `20261107212000`, invitation decline and the invitation deletion guard. No shared data or schema was modified during this integration check. The main build retains a non-blocking large-chunk warning.
+
+For side-by-side preview when port 5173 is already in use, run the root app with `npm run dev -- --host 127.0.0.1 --port 5174 --strictPort`; discovery stays on 5188. The merge does not mount the independent reviewer inside main's routes. Import still uses the existing authenticated API and requires organizer authorization.
