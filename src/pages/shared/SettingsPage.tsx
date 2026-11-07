@@ -5,7 +5,8 @@ import { Card, CardHeader } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { ImageUpload } from '../../components/ui/ImageUpload'
-import { Modal, ConfirmDialog } from '../../components/ui/Modal'
+import { ConfirmDialog } from '../../components/ui/Modal'
+import { DeleteAccountModal } from '../../components/domain/DeleteAccountModal'
 import { SelectInput, TextInput } from '../../components/ui/Field'
 import { PasswordInput } from '../../components/ui/PasswordInput'
 import { ToggleRow } from '../../components/ui/Toggle'
@@ -13,7 +14,7 @@ import { OrgProfileForm, VolunteerProfileForm } from '../../components/domain/Pr
 import { cn, isEmail } from '../../lib/utils'
 import { useSession } from '../../store/session'
 import { defaultSettings } from '../../data/seed'
-import { deleteAccount, resetDemoData, updateOrgProfile, updateSettings, updateUser, updateVolunteerProfile } from '../../store/actions'
+import { resetDemoData, updateOrgProfile, updateSettings, updateUser, updateVolunteerProfile } from '../../store/actions'
 import { saveFullName, updateEmail, updatePassword, verifyPassword } from '../../auth/accountService'
 import { useProfileContext } from '../../auth/useProfileContext'
 import { useLogout } from '../../auth/useLogout'
@@ -66,7 +67,6 @@ function AccountSection() {
   const [pwErr, setPwErr] = useState<Record<string, string>>({})
   const [del, setDel] = useState(false)
   const [reset, setReset] = useState(false)
-  const [typed, setTyped] = useState('')
 
   async function saveAccount(e: React.FormEvent) {
     e.preventDefault()
@@ -150,25 +150,14 @@ function AccountSection() {
             <Button variant="secondary" icon={<RotateCcw size={16} />} onClick={() => setReset(true)}>Reset</Button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-            <div><p className="text-sm font-semibold text-danger">Delete account</p><p className="text-[13px] text-muted">Permanently remove your account and all of its data.</p></div>
-            <Button variant="dangerOutline" icon={<Trash2 size={16} />} onClick={() => { setTyped(''); setDel(true) }}>Delete account</Button>
+            <div><p className="text-sm font-semibold text-danger">Delete account</p><p className="text-[13px] text-muted">Permanently delete your account, sign-in, and data.</p></div>
+            <Button variant="dangerOutline" icon={<Trash2 size={16} />} onClick={() => setDel(true)}>Delete account</Button>
           </div>
         </div>
       </Card>
 
       <ConfirmDialog open={reset} onClose={() => setReset(false)} destructive title="Reset all demo data?" message="Everything you created in this browser (accounts, opportunities, registrations) will be replaced with the original sample data." confirmLabel="Reset demo data" onConfirm={() => { resetDemoData(); void logout('Demo data reset. Log in to start fresh.') }} />
-      <Modal
-        open={del}
-        onClose={() => setDel(false)}
-        size="sm"
-        title="Delete your account?"
-        footer={<><Button variant="secondary" onClick={() => setDel(false)}>Cancel</Button><Button variant="danger" disabled={typed !== 'DELETE'} onClick={() => { deleteAccount(user!.id); void logout('Your profile and data were deleted and you were signed out.') }}>Delete my account</Button></>}
-      >
-        <p className="mb-4 text-sm text-ink/90">
-          {org ? 'Your organization profile, opportunities, and registrations will be permanently removed.' : 'Your profile, registrations, and volunteer hours will be permanently removed.'} This can’t be undone.
-        </p>
-        <TextInput label="Type DELETE to confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
-      </Modal>
+      {del && <DeleteAccountModal userId={user!.id} onClose={() => setDel(false)} />}
     </>
   )
 }

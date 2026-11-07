@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Camera } from 'lucide-react'
 import { OnboardingLayout, Stepper } from './OnboardingLayout'
 import { Card } from '../../components/ui/Card'
@@ -14,6 +14,9 @@ import { toast } from '../../store/toast'
 import { useAvatarUpload } from '../../media/useAvatarUpload'
 import { useProfileContext } from '../../auth/useProfileContext'
 import { saveFullName } from '../../auth/accountService'
+import { finishVolunteerOnboarding } from '../../auth/onboardingService'
+import { TermsConsent } from './TermsConsent'
+import { useTermsConsent } from './useTermsConsent'
 
 const STEPS = ['About you', 'Interests & skills', 'Availability']
 
@@ -22,6 +25,7 @@ export default function VolunteerOnboardingPage() {
   const navigate = useNavigate()
   const uploadAvatar = useAvatarUpload()
   const { profile, setProfile } = useProfileContext()
+  const consent = useTermsConsent()
   const [saving, setSaving] = useState(false)
   const [step, setStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -44,6 +48,7 @@ export default function VolunteerOnboardingPage() {
       if (!f.skills.length) e.skills = 'Pick at least one skill.'
     }
     if (s === 2 && f.phone && !/^[\d\s().+-]{7,}$/.test(f.phone)) e.phone = 'Enter a valid phone number or leave this blank.'
+    if (s === 2 && consent.needed && !consent.checked) e.terms = 'You need to accept the terms to continue.'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -51,13 +56,19 @@ export default function VolunteerOnboardingPage() {
   async function next() {
     if (!validate(step)) return
     if (step < STEPS.length - 1) return setStep(step + 1)
-    if (!user) return
+    if (!user || !profile) return
     setSaving(true)
     try {
       const first = f.firstName.trim()
       const last = f.lastName.trim()
-      // Keep the database display name in step with what the volunteer typed.
-      if (`${first} ${last}`.trim() !== (profile?.full_name ?? '').trim()) setProfile(await saveFullName(first, last))
+      // complete_user_onboarding (RPC) saves the profile, records the terms and marks the user onboarded.
+      let saved = await finishVolunteerOnboarding(profile, {
+        firstName: first, lastName: last, city: f.city, bio: f.bio.trim(), interests: f.interests,
+        skills: f.skills, phone: f.phone.trim(), availability: f.availability,
+      }, consent.accepted)
+      // An already-onboarded row skips the RPC, so keep the display name in step with what was typed.
+      if (`${first} ${last}`.trim() !== saved.full_name.trim()) saved = await saveFullName(first, last)
+      setProfile(saved)
       completeVolunteerOnboarding(user.id, { ...f, firstName: first, lastName: last, bio: f.bio.trim() })
       toast('Your volunteer profile is ready. Welcome to IndyTeer!')
       navigate('/app', { replace: true })
@@ -72,6 +83,7 @@ export default function VolunteerOnboardingPage() {
     <OnboardingLayout>
       <p className="text-sm font-semibold text-navy-700">Step {step + 1} of {STEPS.length}</p>
       <h1 className="mt-1 mb-6 text-[26px] leading-tight">Set up your volunteer profile</h1>
+      <p className="-mt-3 mb-6 text-sm text-muted">Not the right account type? <Link to="/onboarding/account-type" className="font-semibold text-navy-700 hover:underline">Change it</Link></p>
       <Stepper steps={STEPS} current={step} />
 
       <Card className="p-6 sm:p-8">
@@ -105,6 +117,7 @@ export default function VolunteerOnboardingPage() {
               <option value="">Select when you’re usually free</option>
               {AVAILABILITY_OPTIONS.map((a) => <option key={a}>{a}</option>)}
             </SelectInput>
+            {consent.needed && <TermsConsent checked={consent.checked} onChange={consent.setChecked} error={errors.terms} />}
             <div className="rounded-md bg-navy-50 p-4 text-sm text-navy-800">
               <p className="font-semibold text-navy">Almost there</p>
               <p className="mt-1 text-navy-700">{f.firstName} {f.lastName} · {f.city}, IN · {f.interests.length} interests · {f.skills.length} skills</p>

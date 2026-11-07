@@ -2,7 +2,8 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, apikey, content-type',
+  // supabase-js adds x-client-info to every request; the browser preflight fails without it.
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
@@ -60,6 +61,11 @@ Deno.serve(async (request) => {
       return Response.json({ error: 'Your session could not be verified.' }, { status: 401, headers: corsHeaders })
     }
 
+    // Deleting owned organizations is destructive and affects other people, so the caller must ask
+    // for it explicitly. Without the flag, an account that owns an organization is not deleted.
+    const body = await request.json().catch(() => ({})) as { deleteOwnedOrganizations?: unknown }
+    const confirmedOrganizationDeletion = body?.deleteOwnedOrganizations === true
+
     const admin = createClient(url, adminKey, { auth: { persistSession: false, autoRefreshToken: false } })
     const { data: memberships, error: membershipsError } = await admin
       .from('organization_memberships').select('organization_id,role,status').eq('user_id', user.id)
@@ -76,6 +82,41 @@ Deno.serve(async (request) => {
       ...(memberships ?? []).filter((row) => row.role === 'owner' && row.status === 'active')
         .map((row) => row.organization_id),
     ])]
+
+    // Safety checks run before anything is removed. organizations.created_by cascades from the user,
+    // and the ownership-transfer workflow does not exist yet, so deleting an account always deletes
+    // the organizations in `organizationsToDelete` for everyone. Refuse when that would take other
+    // active members' organization away, and when the caller did not confirm the deletion.
+    if (organizationsToDelete.length) {
+      const { data: organizations, error: organizationsError } = await admin
+        .from('organizations').select('id,name').in('id', organizationsToDelete)
+      if (organizationsError) throw organizationsError
+      const { data: others, error: othersError } = await admin
+        .from('organization_memberships').select('organization_id')
+        .in('organization_id', organizationsToDelete).neq('user_id', user.id).eq('status', 'active')
+      if (othersError) throw othersError
+      const memberCounts = new Map<string, number>()
+      for (const row of others ?? []) {
+        memberCounts.set(row.organization_id, (memberCounts.get(row.organization_id) ?? 0) + 1)
+      }
+      const summary = (organizations ?? []).map((row) => ({
+        id: row.id, name: row.name, otherActiveMembers: memberCounts.get(row.id) ?? 0,
+      }))
+      if (summary.some((row) => row.otherActiveMembers > 0)) {
+        return Response.json({
+          code: 'ORGANIZATION_HAS_MEMBERS',
+          error: 'An organization you own has other active members. Ownership transfer is not available yet, so your account was not deleted.',
+          organizations: summary,
+        }, { status: 409, headers: corsHeaders })
+      }
+      if (!confirmedOrganizationDeletion) {
+        return Response.json({
+          code: 'ORGANIZATION_DELETION_NOT_CONFIRMED',
+          error: 'Your account owns organizations that would be permanently deleted. Confirm that you want to delete them to continue.',
+          organizations: summary,
+        }, { status: 409, headers: corsHeaders })
+      }
+    }
 
     // Remove objects through the Storage API before deleting Auth. Supabase Auth
     // rejects deletion while the user still owns Storage objects.

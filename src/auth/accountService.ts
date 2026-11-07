@@ -1,15 +1,17 @@
 import { supabase } from '../lib/supabase'
-import { updateProfile } from '../lib/api/profiles'
-import type { Profile } from '../types/models'
+import { updateUser } from '../lib/api/users'
+import type { User } from '../types/models'
 
 /**
- * Account operations that sit next to authService.ts. Account type is chosen at signup and lives
- * in public.profiles (see the signup trigger); it is never changed from the client.
+ * Account operations that sit next to authService.ts. Account roles are never edited from here:
+ * a user becomes an organization owner only through the create_organization RPC.
  */
 
-/** Saves the display name to public.profiles.full_name and returns the updated row. */
-export function saveFullName(first: string, last: string): Promise<Profile> {
-  return updateProfile({ full_name: `${first.trim()} ${last.trim()}`.trim() })
+/** Saves the display name to public.users and returns the updated row. */
+export function saveFullName(first: string, last: string): Promise<User> {
+  const firstName = first.trim()
+  const lastName = last.trim()
+  return updateUser({ first_name: firstName, last_name: lastName, full_name: `${firstName} ${lastName}`.trim() })
 }
 
 export async function requestPasswordReset(email: string) {

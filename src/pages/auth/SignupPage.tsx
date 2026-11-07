@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertCircle, Building2, Check, HeartHandshake, MailCheck } from 'lucide-react'
+import { AlertCircle, MailCheck } from 'lucide-react'
 import { AuthLayout } from '../../components/layout/AuthLayout'
 import { TextInput } from '../../components/ui/Field'
 import { PasswordInput } from '../../components/ui/PasswordInput'
@@ -9,13 +9,11 @@ import { useAuth } from '../../auth/useAuth'
 import { resendConfirmation } from '../../auth/accountService'
 import { setRememberMe } from '../../auth/rememberMe'
 import { toast } from '../../store/toast'
-import { cn, isEmail } from '../../lib/utils'
-import type { AccountType } from '../../types'
+import { isEmail } from '../../lib/utils'
 
 export default function SignupPage() {
   const { signUp } = useAuth()
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '', confirm: '' })
-  const [accountType, setAccountType] = useState<AccountType | null>(null)
   const [terms, setTerms] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -25,7 +23,6 @@ export default function SignupPage() {
   async function submit(e: FormEvent) {
     e.preventDefault()
     const err: Record<string, string> = {}
-    if (!accountType) err.accountType = 'Choose how you will use IndyTeer.'
     if (!form.firstName.trim()) err.firstName = 'Required'
     if (!form.lastName.trim()) err.lastName = 'Required'
     if (!form.email.trim()) err.email = 'Enter your email address.'
@@ -34,20 +31,20 @@ export default function SignupPage() {
     if (form.confirm !== form.password) err.confirm = 'Passwords don’t match.'
     if (!terms) err.terms = 'You need to accept the terms to continue.'
     setErrors(err)
-    if (Object.keys(err).length || !accountType) return
+    if (Object.keys(err).length) return
 
     setBusy(true)
     try {
       setRememberMe(true)
       const first = form.firstName.trim()
       const last = form.lastName.trim()
-      const result = await signUp(form.email, form.password, `${first} ${last}`, accountType, {
+      const result = await signUp(form.email, form.password, `${first} ${last}`, {
         first_name: first,
         last_name: last,
         terms_accepted_at: new Date().toISOString(),
       })
-      // With email confirmation off, a session exists and the route guard moves on to onboarding
-      // (the backend trigger has already created the profile with this account type).
+      // With email confirmation off, a session exists and the route guard moves on to onboarding,
+      // where the person chooses volunteer or organization (no account type is sent at signup).
       if (result.needsEmailConfirmation) setSentTo(form.email.trim())
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : 'Could not create your account. Please try again.'
@@ -69,7 +66,7 @@ export default function SignupPage() {
 
   if (sentTo) {
     return (
-      <AuthLayout title="Check your email" subtitle="One more step before you set up your profile.">
+      <AuthLayout title="Check your email" subtitle="One more step before you set up your account.">
         <div className="rounded-lg border border-green-200 bg-success-50 p-5">
           <MailCheck className="text-success" size={24} />
           <p className="mt-3 text-sm font-semibold text-ink">We sent a confirmation link to {sentTo}</p>
@@ -96,35 +93,6 @@ export default function SignupPage() {
             <span>{errors.form}</span>
           </div>
         )}
-        <div>
-          <p id="account-type-label" className="mb-1.5 text-[13px] font-semibold text-ink">I am joining as</p>
-          <div role="radiogroup" aria-labelledby="account-type-label" className="grid gap-3 sm:grid-cols-2">
-            {([
-              ['volunteer', 'A volunteer', 'Find and track opportunities', HeartHandshake],
-              ['organization', 'An organization', 'Recruit and manage volunteers', Building2],
-            ] as const).map(([type, title, blurb, Icon]) => {
-              const on = accountType === type
-              return (
-                <button
-                  key={type}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  onClick={() => setAccountType(type)}
-                  className={cn('relative flex items-start gap-3 rounded-md border-2 p-3 text-left transition-colors', on ? 'border-navy bg-navy-50' : 'border-line hover:border-navy-200')}
-                >
-                  <span className={cn('flex size-9 shrink-0 items-center justify-center rounded', on ? 'bg-gold text-navy-950' : 'bg-navy-50 text-navy-700')}><Icon size={18} /></span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold text-navy">{title}</span>
-                    <span className="block text-xs text-muted">{blurb}</span>
-                  </span>
-                  {on && <Check size={16} className="absolute top-2.5 right-2.5 text-navy" strokeWidth={3} />}
-                </button>
-              )
-            })}
-          </div>
-          {errors.accountType && <p role="alert" className="mt-1.5 text-xs font-medium text-danger">{errors.accountType}</p>}
-        </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <TextInput label="First name" autoComplete="given-name" value={form.firstName} onChange={set('firstName')} error={errors.firstName} />
           <TextInput label="Last name" autoComplete="family-name" value={form.lastName} onChange={set('lastName')} error={errors.lastName} />

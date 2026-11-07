@@ -6,11 +6,12 @@ import { syncAuthUser } from '../store/actions'
 
 /**
  * Keeps the app's local data store in step with the real session (Supabase Auth) and the
- * database profile (account type, name, avatar). Render once inside <ProfileProvider>.
+ * public.users row and memberships. Render once inside <ProfileProvider>.
  */
 export function SessionBridge() {
   const { user, loading, signOut } = useAuth()
-  const { profile, loading: profileLoading } = useProfileContext()
+  const { profile, memberships, loading: profileLoading } = useProfileContext()
+  const hasOrganization = memberships.some((m) => m.status === 'active')
 
   useEffect(() => {
     if (shouldDropTemporarySession()) void signOut().catch(() => undefined)
@@ -21,8 +22,8 @@ export function SessionBridge() {
     if (!user) return syncAuthUser(null, null)
     // Signed in: wait for the database profile. If it failed to load, the guards show an error.
     if (profileLoading || !profile) return
-    syncAuthUser(user, profile)
-  }, [loading, user, profile, profileLoading])
+    syncAuthUser(user, profile, hasOrganization)
+  }, [loading, user, profile, profileLoading, hasOrganization])
 
   return null
 }

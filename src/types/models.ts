@@ -22,7 +22,7 @@ export interface User {
   avatar_url: string | null
   avatar_path: string | null
   phone: string | null
-  availability: Json
+  availability: NonNullable<Json>
   interests: string[]
   skills: string[]
   onboarded: boolean

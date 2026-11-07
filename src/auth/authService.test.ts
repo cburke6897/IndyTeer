@@ -23,31 +23,37 @@ describe('email auth actions', () => {
     vi.clearAllMocks()
   })
 
-  it.each(['volunteer', 'organization'] as const)('sends the required %s account type and full name to the trigger', async (accountType) => {
+  it('sends only the full name (and extras) to the trigger, never an account type', async () => {
     signUpMock.mockResolvedValue({ data: { session: null }, error: null })
 
-    const result = await signUpWithEmail(' volunteer@example.org ', 'good-password', ' Kai ', accountType)
+    const result = await signUpWithEmail(' volunteer@example.org ', 'good-password', ' Kai ', { terms_accepted_at: 'now' })
 
     expect(signUpMock).toHaveBeenCalledWith({
       email: 'volunteer@example.org',
       password: 'good-password',
       options: {
-        data: { full_name: 'Kai', account_type: accountType },
+        data: { terms_accepted_at: 'now', full_name: 'Kai' },
         emailRedirectTo: window.location.origin,
       },
     })
+    expect(JSON.stringify(signUpMock.mock.calls[0][0])).not.toContain('account_type')
     expect(result.needsEmailConfirmation).toBe(true)
+  })
+
+  it('does not let extra metadata override the name', async () => {
+    signUpMock.mockResolvedValue({ data: { session: null }, error: null })
+    await signUpWithEmail('kai@example.org', 'good-password', 'Kai', { full_name: 'Someone Else' })
+    expect(signUpMock.mock.calls[0][0].options.data.full_name).toBe('Kai')
   })
 
   it('reports an immediate signup session when email confirmation is disabled', async () => {
     signUpMock.mockResolvedValue({ data: { session: { access_token: 'token' } }, error: null })
-    await expect(signUpWithEmail('kai@example.org', 'good-password', 'Kai', 'volunteer'))
+    await expect(signUpWithEmail('kai@example.org', 'good-password', 'Kai'))
       .resolves.toEqual({ needsEmailConfirmation: false })
   })
 
-  it.each([undefined, '', 'admin'])('rejects an invalid account type (%s) before calling Supabase', async (value) => {
-    await expect(signUpWithEmail('kai@example.org', 'good-password', 'Kai', value as 'volunteer'))
-      .rejects.toThrow('Choose volunteer or organization')
+  it('requires a name before calling Supabase', async () => {
+    await expect(signUpWithEmail('kai@example.org', 'good-password', '  ')).rejects.toThrow('Enter your full name')
     expect(signUpMock).not.toHaveBeenCalled()
   })
 

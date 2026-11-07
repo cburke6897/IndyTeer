@@ -39,27 +39,30 @@ describe('signup page', () => {
     stub.impl = () => Promise.resolve({ needsEmailConfirmation: false })
   })
 
-  it('requires an explicit account type before calling Supabase', async () => {
+  it('does not ask for or send an account type', async () => {
     renderPage()
-    fillForm()
-    submit()
-    expect(await screen.findByText('Choose how you will use IndyTeer.')).toBeInTheDocument()
-    expect(stub.calls).toHaveLength(0)
-  })
-
-  it('sends the chosen account type and full name to signUp', async () => {
-    renderPage()
-    fireEvent.click(screen.getByRole('radio', { name: /An organization/ }))
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument()
     fillForm()
     submit()
     await waitFor(() => expect(stub.calls).toHaveLength(1))
-    expect(stub.calls[0].slice(0, 4)).toEqual(['kai@example.org', 'good-password', 'Kai Rivera', 'organization'])
+    const [email, password, fullName, extra] = stub.calls[0]
+    expect([email, password, fullName]).toEqual(['kai@example.org', 'good-password', 'Kai Rivera'])
+    expect(JSON.stringify(extra)).not.toContain('account_type')
+    expect(extra).toMatchObject({ first_name: 'Kai', last_name: 'Rivera' })
+  })
+
+  it('blocks submit until the terms are accepted', async () => {
+    renderPage()
+    fillForm()
+    fireEvent.click(screen.getByRole('checkbox'))
+    submit()
+    expect(await screen.findByText('You need to accept the terms to continue.')).toBeInTheDocument()
+    expect(stub.calls).toHaveLength(0)
   })
 
   it('shows the check-your-email screen when confirmation is required', async () => {
     stub.impl = () => Promise.resolve({ needsEmailConfirmation: true })
     renderPage()
-    fireEvent.click(screen.getByRole('radio', { name: /A volunteer/ }))
     fillForm()
     submit()
     expect(await screen.findByText(/We sent a confirmation link to kai@example.org/)).toBeInTheDocument()
@@ -68,7 +71,6 @@ describe('signup page', () => {
   it('shows a friendly message when the email is already registered', async () => {
     stub.impl = () => Promise.reject(new Error('User already registered'))
     renderPage()
-    fireEvent.click(screen.getByRole('radio', { name: /A volunteer/ }))
     fillForm()
     submit()
     expect(await screen.findByText(/already exists/)).toBeInTheDocument()

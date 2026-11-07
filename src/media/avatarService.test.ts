@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { uploadMock, getPublicUrlMock, updateProfileMock, getUserMock } = vi.hoisted(() => ({
+const { uploadMock, getPublicUrlMock, updateUserMock, getUserMock } = vi.hoisted(() => ({
   uploadMock: vi.fn(),
   getPublicUrlMock: vi.fn(),
-  updateProfileMock: vi.fn(),
+  updateUserMock: vi.fn(),
   getUserMock: vi.fn(),
 }))
 
@@ -16,7 +16,7 @@ vi.mock('../lib/supabase', () => ({
   },
 }))
 
-vi.mock('../lib/api/profiles', () => ({ updateProfile: updateProfileMock }))
+vi.mock('../lib/api/users', () => ({ updateUser: updateUserMock }))
 
 import { MAX_AVATAR_SIZE_BYTES, uploadAvatar } from './avatarService'
 
@@ -28,7 +28,7 @@ describe('avatar uploads', () => {
       data: { publicUrl: 'https://project.supabase.co/storage/v1/object/public/avatars/user-1/avatar' },
     })
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null })
-    updateProfileMock.mockImplementation(async (patch) => ({ id: 'user-1', full_name: 'Kai', ...patch }))
+    updateUserMock.mockImplementation(async (patch) => ({ id: 'user-1', full_name: 'Kai', ...patch }))
   })
 
   it('rejects unsupported files before contacting Storage', async () => {
@@ -39,11 +39,11 @@ describe('avatar uploads', () => {
 
   it('rejects files over the client size limit', async () => {
     const file = new File([new Uint8Array(MAX_AVATAR_SIZE_BYTES + 1)], 'large.png', { type: 'image/png' })
-    await expect(uploadAvatar(file, 'user-1')).rejects.toThrow('smaller than 5 MB')
+    await expect(uploadAvatar(file, 'user-1')).rejects.toThrow('smaller than 2 MB')
     expect(uploadMock).not.toHaveBeenCalled()
   })
 
-  it('uses the Auth user folder and persists the public URL in profiles.avatar_url', async () => {
+  it('uses the Auth user folder and persists the public URL and Storage path on users', async () => {
     const file = new File(['image data'], 'profile.webp', { type: 'image/webp' })
     const result = await uploadAvatar(file, 'user-1')
 
@@ -52,8 +52,9 @@ describe('avatar uploads', () => {
       contentType: 'image/webp',
       upsert: true,
     })
-    expect(updateProfileMock).toHaveBeenCalledWith({
+    expect(updateUserMock).toHaveBeenCalledWith({
       avatar_url: result.publicUrl,
+      avatar_path: 'user-1/avatar',
     })
     expect(result.path).toBe('user-1/avatar')
     expect(result.publicUrl).toContain('v=')
@@ -64,18 +65,18 @@ describe('avatar uploads', () => {
     uploadMock.mockResolvedValue({ error: new Error('upload denied') })
     const file = new File(['image data'], 'profile.png', { type: 'image/png' })
     await expect(uploadAvatar(file, 'user-1')).rejects.toThrow('upload denied')
-    expect(updateProfileMock).not.toHaveBeenCalled()
+    expect(updateUserMock).not.toHaveBeenCalled()
   })
 
   it('rejects a Storage owner that differs from the signed-in Auth user', async () => {
     const file = new File(['image data'], 'profile.png', { type: 'image/png' })
     await expect(uploadAvatar(file, 'another-user')).rejects.toThrow('your own profile')
     expect(uploadMock).not.toHaveBeenCalled()
-    expect(updateProfileMock).not.toHaveBeenCalled()
+    expect(updateUserMock).not.toHaveBeenCalled()
   })
 
   it('does not report success if saving the profile URL fails', async () => {
-    updateProfileMock.mockRejectedValue(new Error('Profile row missing'))
+    updateUserMock.mockRejectedValue(new Error('Profile row missing'))
     const file = new File(['image data'], 'profile.png', { type: 'image/png' })
     await expect(uploadAvatar(file, 'user-1')).rejects.toThrow('Profile row missing')
   })

@@ -1,8 +1,9 @@
 import { supabase } from '../lib/supabase'
-import { updateProfile } from '../lib/api/profiles'
+import { updateUser } from '../lib/api/users'
 
 export const AVATAR_BUCKET = 'avatars'
-export const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
+// Matches the bucket's file_size_limit (2 MiB) in supabase/config.toml and the storage migration.
+export const MAX_AVATAR_SIZE_BYTES = 2 * 1024 * 1024
 export const ALLOWED_AVATAR_TYPES = [
   'image/jpeg',
   'image/png',
@@ -15,7 +16,7 @@ export async function uploadAvatar(file: File, userId: string) {
   }
   if (file.size === 0) throw new Error('The selected image is empty.')
   if (file.size > MAX_AVATAR_SIZE_BYTES) {
-    throw new Error('Choose an image smaller than 5 MB.')
+    throw new Error('Choose an image smaller than 2 MB.')
   }
 
   const { data: authData, error: authError } = await supabase.auth.getUser()
@@ -42,9 +43,10 @@ export async function uploadAvatar(file: File, userId: string) {
   publicUrl.searchParams.set('v', String(Date.now()))
   const avatarUrl = publicUrl.toString()
 
-  // The backend trigger creates profiles.id = auth.users.id. This API scopes
-  // the update to the current Auth user and reports a missing profile as an error.
-  const profile = await updateProfile({ avatar_url: avatarUrl })
+  // The backend trigger creates users.id = auth.users.id. This API scopes the update to the
+  // current Auth user and reports a missing row as an error. avatar_path is the Storage key, so
+  // the object can be located (and removed) without parsing the public URL.
+  const profile = await updateUser({ avatar_url: avatarUrl, avatar_path: path })
 
   return { path, publicUrl: avatarUrl, profile }
 }

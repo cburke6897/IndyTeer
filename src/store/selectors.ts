@@ -20,9 +20,9 @@ export function sessionOrg(db: DB): OrgProfile | null {
 
 export function homePathFor(user: User | null) {
   if (!user) return '/login'
-  // accountType always comes from the database profile (chosen at signup). The fallback only
-  // keeps this function total and can never route back to a guarded page.
-  if (!user.onboarded) return `/onboarding/${user.accountType ?? 'volunteer'}`
+  // The database has no account type: it is picked during onboarding (and derived afterwards).
+  if (!user.accountType) return '/onboarding/account-type'
+  if (!user.onboarded) return `/onboarding/${user.accountType}`
   return user.accountType === 'volunteer' ? '/app' : '/org'
 }
 

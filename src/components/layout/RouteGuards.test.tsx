@@ -24,7 +24,10 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route element={<PublicOnly />}><Route path="/login" element={<p>login page</p>} /></Route>
-        <Route element={<RequireOnboarding />}><Route path="/onboarding/volunteer" element={<p>volunteer onboarding</p>} /></Route>
+        <Route element={<RequireOnboarding />}>
+          <Route path="/onboarding/account-type" element={<p>choose account type</p>} />
+          <Route path="/onboarding/volunteer" element={<p>volunteer onboarding</p>} />
+        </Route>
         <Route element={<RequireRole role="volunteer" />}><Route path="/app" element={<p>volunteer app</p>} /></Route>
         <Route element={<RequireRole role="organization" />}><Route path="/org" element={<p>org app</p>} /></Route>
       </Routes>
@@ -58,6 +61,12 @@ describe('route guards use the real session', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('multiple (or no) rows')
     expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
     expect(screen.queryByText('login page')).not.toBeInTheDocument()
+  })
+
+  it('sends a signed-in user who has not chosen an account type to the chooser', () => {
+    state.user = { id: 'u1', accountType: null, onboarded: false }
+    renderAt('/app')
+    expect(screen.getByText('choose account type')).toBeInTheDocument()
   })
 
   it('routes a signed-in, not-yet-onboarded user to onboarding for their account type', () => {

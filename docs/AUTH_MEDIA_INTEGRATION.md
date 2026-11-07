@@ -1,5 +1,7 @@
 # Auth and Media integration contract
 
+> **Superseded in part.** The `profiles` / `account_type` model described in the early sections below was replaced by the `public.users` + organization-membership schema (migrations `20261107165500` onward). Signup no longer sends `account_type`; see "Frontend integration status" at the end for the current contract.
+
 ## Ownership
 
 The backend teammate owns the Supabase schema, signup trigger, existing-user backfill, RLS, and Storage SQL migrations. Auth and Media owns the signup and upload flows. This change does not apply or alter schema/Storage migrations.
@@ -70,17 +72,15 @@ Run npm test, npm run build, and npm run lint. Then test real signup for both ac
 
 ## Frontend integration status
 
-The full frontend (App routes, layouts, Logo, theme) is the foundation; the standalone `AuthPage`, `HomePage`, `ProfilePage`, `AvatarUploader`, `RequireAuth`, and `App.css` demo screens were removed.
+Current (users + organizations schema):
 
-Done:
+- `AuthProvider` wraps all routes, with `ProfileProvider` + `SessionBridge` inside it. Supabase Auth is the only source of "who is signed in"; the mock `login`, `signup`, `logout`, `loginDemo` actions and demo credentials are gone.
+- Signup (`src/pages/auth/SignupPage.tsx`) calls `signUp(email, password, fullName, extraMetadata?)`. Metadata is `full_name` plus optional `first_name`, `last_name`, `terms_accepted_at`; **no `account_type`**. The trigger creates the `public.users` row from `full_name` / `avatar_url`.
+- After signup the person picks volunteer or organization on `/onboarding/account-type`. This is a local UI choice only: the database has no account type. Volunteers call `complete_user_onboarding`; organizations call `complete_user_onboarding` then `create_organization`, which makes them the owner. Both calls are skipped when already done. `terms_accepted: true` is sent only if the signup form recorded acceptance, otherwise onboarding shows a terms checkbox.
+- `useSession()` combines the Auth session, the `users` row, and the user's memberships. A row-load failure shows an error screen (retry / log out) and is never treated as signed out.
+- Avatar uploads use `uploadAvatar` (2 MiB limit) and save `avatar_url` + `avatar_path` on `users`.
+- Display-name edits are written to `users` (`first_name`, `last_name`, `full_name`).
+- Password reset, password change, email change, resend-confirmation, and "remember me" are real.
+- Delete account is real (Edge Function); see `docs/ACCOUNT_DELETION_AND_OWNERSHIP.md`.
 
-- `AuthProvider` wraps all routes, with `ProfileProvider` + `SessionBridge` inside it. Supabase Auth is the only source of "who is signed in"; the mock `login`, `signup`, `logout`, `loginDemo`, `chooseAccountType` actions and demo credentials are gone.
-- Signup (`src/pages/auth/SignupPage.tsx`) requires an explicit account type and calls `signUp(email, password, fullName, accountType, extraMetadata?)`. The optional fifth argument adds `first_name`, `last_name`, and `terms_accepted_at` to the signup metadata; `full_name` and `account_type` always win. There is no account-type chooser after signup.
-- `useSession()` combines the Auth session and the database profile. Role routing uses `profiles.account_type`. A profile-load failure shows an error screen (retry / log out) and is never treated as signed out.
-- Avatar uploads use `uploadAvatar` through `ImageUpload`'s `upload` prop and refresh the cached profile from the saved row. The local volunteer avatar is synced from `profiles.avatar_url`.
-- Display-name edits (onboarding, profile form, Settings) are written to `profiles.full_name`.
-- Password reset, password change (re-checks the current password), email change, resend-confirmation, and "remember me" are real.
-
-Still mock (local store only): onboarding details, volunteer and organization profile fields, opportunities, registrations, hours, follows, notifications, and settings. The `profiles` table has no `onboarded` flag, so onboarding completion is tracked locally: on a new device a signed-in user with a database profile but no local profile is sent through onboarding again.
-
-Open items for the backend owner: an `onboarded`/profile-completion contract, mapping UI registration statuses and opportunity fields to the database model, and an Edge Function to delete Auth users.
+Still mock (local store only): volunteer and organization profile content beyond what onboarding sends, opportunities, registrations, hours, follows, notifications, settings, posts. Notable gaps against the database model: no date of birth is collected (needed for `min_age` registration checks), no organization membership/invite UI, no `join_policy` choice (new organizations default to `approval`), organization logos/covers are not uploaded to Storage, and UI registration statuses do not yet map to the database `registration_status`.

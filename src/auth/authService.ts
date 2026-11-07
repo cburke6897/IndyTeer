@@ -1,22 +1,23 @@
 import { supabase } from '../lib/supabase'
-import type { AccountType } from '../types/models'
 
+/**
+ * Signup metadata is input for the database trigger (public.handle_new_user), which creates the
+ * public.users row from `full_name` / `avatar_url`. It must never carry an account type or any
+ * other authorization data: Auth metadata is editable by the user, and account roles live in the
+ * database (organization memberships), set only by supported RPCs.
+ */
 export async function signUpWithEmail(
   email: string,
   password: string,
   displayName: string,
-  accountType: AccountType,
   extraMetadata: Record<string, string> = {},
 ) {
-  if (accountType !== 'volunteer' && accountType !== 'organization') {
-    throw new Error('Choose volunteer or organization as your account type.')
-  }
   if (!displayName.trim()) throw new Error('Enter your full name.')
   const { data, error } = await supabase.auth.signUp({
     email: email.trim(),
     password,
     options: {
-      data: { ...extraMetadata, full_name: displayName.trim(), account_type: accountType },
+      data: { ...extraMetadata, full_name: displayName.trim() },
       emailRedirectTo: window.location.origin,
     },
   })

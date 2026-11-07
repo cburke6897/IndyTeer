@@ -29,7 +29,8 @@ export interface AuthUserLike {
   email?: string | null
 }
 
-export type ProfileLike = { account_type: AccountType; full_name: string; avatar_url: string | null }
+/** The parts of public.users the local store mirrors. */
+export type ProfileLike = { full_name: string; avatar_url: string | null; onboarded: boolean }
 
 function splitName(full: string, email: string) {
   const parts = (full.trim() || email.split('@')[0]).split(/\s+/)
@@ -37,12 +38,16 @@ function splitName(full: string, email: string) {
 }
 
 /**
- * Mirrors the signed-in Supabase user and their database profile into the local store.
- * The profile is authoritative for account type and avatar. Names are copied when the local user
- * is created; later edits are written to both places by the Settings/profile forms.
+ * Mirrors the signed-in Supabase user and their public.users row into the local store.
+ *
+ * The database has no account type. The local `accountType` is the mode the person picked during
+ * onboarding (see chooseAccountType). For a user whose row is already onboarded and who has no local
+ * record (new browser, cleared storage) it is derived: an active organization membership means
+ * 'organization', otherwise 'volunteer'. The database `onboarded` flag is authoritative in one
+ * direction: a row that is not onboarded is never treated as onboarded locally.
  * Idempotent: does nothing when the store is already in sync.
  */
-export function syncAuthUser(authUser: AuthUserLike | null, profile: ProfileLike | null) {
+export function syncAuthUser(authUser: AuthUserLike | null, profile: ProfileLike | null, hasOrganization = false) {
   const db = getDB()
   if (!authUser || !profile) {
     if (db.sessionUserId !== null) setDB((d) => ({ ...d, sessionUserId: null }))
@@ -50,11 +55,12 @@ export function syncAuthUser(authUser: AuthUserLike | null, profile: ProfileLike
   }
   const email = authUser.email ?? ''
   const existing = db.users.find((u) => u.id === authUser.id)
+  const derivedType: AccountType | null = profile.onboarded ? (hasOrganization ? 'organization' : 'volunteer') : null
 
   if (!existing) {
     const { first, last } = splitName(profile.full_name, email)
     const user: User = {
-      id: authUser.id, email, firstName: first, lastName: last, accountType: profile.account_type,
+      id: authUser.id, email, firstName: first, lastName: last, accountType: derivedType,
       onboarded: false, profileId: null, createdAt: nowISO(),
     }
     setDB((d) => ({
@@ -66,17 +72,23 @@ export function syncAuthUser(authUser: AuthUserLike | null, profile: ProfileLike
     return
   }
 
-  const typeChanged = existing.accountType !== profile.account_type
+  const typeFilled = !existing.accountType && !!derivedType
+  const staleOnboarded = existing.onboarded && !profile.onboarded
   const emailChanged = !!email && existing.email !== email
   const localVolunteer = existing.accountType === 'volunteer' && existing.profileId
     ? db.volunteers.find((v) => v.id === existing.profileId)
     : undefined
   const avatarChanged = !!localVolunteer && localVolunteer.avatar !== profile.avatar_url
-  if (typeChanged || emailChanged || avatarChanged || db.sessionUserId !== existing.id) {
+  if (typeFilled || staleOnboarded || emailChanged || avatarChanged || db.sessionUserId !== existing.id) {
     setDB((d) => ({
       ...d,
       users: d.users.map((u) => (u.id === existing.id
-        ? { ...u, email: emailChanged ? email : u.email, accountType: profile.account_type }
+        ? {
+            ...u,
+            email: emailChanged ? email : u.email,
+            accountType: typeFilled ? derivedType : u.accountType,
+            onboarded: staleOnboarded ? false : u.onboarded,
+          }
         : u)),
       volunteers: avatarChanged
         ? d.volunteers.map((v) => (v.id === localVolunteer!.id ? { ...v, avatar: profile.avatar_url } : v))
@@ -84,6 +96,14 @@ export function syncAuthUser(authUser: AuthUserLike | null, profile: ProfileLike
       sessionUserId: existing.id,
     }))
   }
+}
+
+/** Records which kind of account the person is setting up. Only allowed until onboarding is complete. */
+export function chooseAccountType(userId: string, accountType: AccountType) {
+  setDB((d) => ({
+    ...d,
+    users: d.users.map((u) => (u.id === userId && !u.onboarded ? { ...u, accountType } : u)),
+  }))
 }
 
 export interface VolunteerOnboardingInput {
@@ -100,7 +120,7 @@ export function completeVolunteerOnboarding(userId: string, input: VolunteerOnbo
   }
   setDB((d) => notify({
     ...d,
-    volunteers: [...d.volunteers, profile],
+    volunteers: [...d.volunteers.filter((v) => v.userId !== userId), profile],
     users: d.users.map((u) => (u.id === userId ? { ...u, firstName: input.firstName, lastName: input.lastName, accountType: 'volunteer', onboarded: true, profileId: id } : u)),
   }, userId, 'Welcome to IndyTeer! Browse opportunities to register for your first event.', '/app/explore'))
 }
@@ -110,8 +130,9 @@ export interface OrgOnboardingInput {
   city: string; email: string; phone: string; focus: string[]
 }
 
-export function completeOrgOnboarding(userId: string, input: OrgOnboardingInput) {
-  const id = uid('org')
+/** `orgId` is the id the database assigned (create_organization), so local and remote ids match. */
+export function completeOrgOnboarding(userId: string, input: OrgOnboardingInput, orgId?: string) {
+  const id = orgId ?? uid('org')
   const org: OrgProfile = {
     id, userId, name: input.name, logo: input.logo, cover: null, type: input.type, description: input.description,
     mission: input.mission, website: input.website, city: input.city, state: 'IN', email: input.email, phone: input.phone,
@@ -120,7 +141,7 @@ export function completeOrgOnboarding(userId: string, input: OrgOnboardingInput)
   }
   setDB((d) => notify({
     ...d,
-    organizations: [...d.organizations, org],
+    organizations: [...d.organizations.filter((o) => o.userId !== userId), org],
     users: d.users.map((u) => (u.id === userId ? { ...u, accountType: 'organization', onboarded: true, profileId: id } : u)),
   }, userId, 'Your organization is live. Create your first volunteer opportunity.', '/org/opportunities/new'))
 }

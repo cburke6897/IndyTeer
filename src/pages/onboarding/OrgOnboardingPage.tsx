@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Building2 } from 'lucide-react'
 import { OnboardingLayout, Stepper } from './OnboardingLayout'
 import { Card } from '../../components/ui/Card'
@@ -12,12 +12,19 @@ import { completeOrgOnboarding } from '../../store/actions'
 import { useSession } from '../../store/session'
 import { toast } from '../../store/toast'
 import { isEmail, normalizeUrl } from '../../lib/utils'
+import { useProfileContext } from '../../auth/useProfileContext'
+import { finishOrganizationSetup } from '../../auth/onboardingService'
+import { TermsConsent } from './TermsConsent'
+import { useTermsConsent } from './useTermsConsent'
 
 const STEPS = ['Organization', 'Mission', 'Contact']
 
 export default function OrgOnboardingPage() {
   const { user } = useSession()
+  const { profile, memberships, setProfile, retry } = useProfileContext()
+  const consent = useTermsConsent()
   const navigate = useNavigate()
+  const [saving, setSaving] = useState(false)
   const [step, setStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [f, setF] = useState({
@@ -42,24 +49,37 @@ export default function OrgOnboardingPage() {
       if (!isEmail(f.email.trim())) e.email = 'Enter a valid contact email.'
       if (f.website && !/^(https?:\/\/)?[\w-]+(\.[\w-]+)+(\/.*)?$/i.test(f.website.trim())) e.website = 'Enter a valid website, e.g. yourgroup.org'
       if (f.phone && !/^[\d\s().+-]{7,}$/.test(f.phone)) e.phone = 'Enter a valid phone number or leave this blank.'
+      if (consent.needed && !consent.checked) e.terms = 'You need to accept the terms to continue.'
     }
     setErrors(e)
     return Object.keys(e).length === 0
   }
 
-  function next() {
+  async function next() {
     if (!validate(step)) return
     if (step < STEPS.length - 1) return setStep(step + 1)
-    if (!user) return
-    completeOrgOnboarding(user.id, { ...f, name: f.name.trim(), description: f.description.trim(), mission: f.mission.trim(), website: normalizeUrl(f.website.trim()), email: f.email.trim() })
-    toast(`${f.name.trim()} is live on IndyTeer.`)
-    navigate('/org', { replace: true })
+    if (!user || !profile) return
+    const input = { ...f, name: f.name.trim(), description: f.description.trim(), mission: f.mission.trim(), website: normalizeUrl(f.website.trim()), email: f.email.trim() }
+    setSaving(true)
+    try {
+      // complete_user_onboarding then create_organization (RPCs): the user becomes the owner.
+      const { organizationId } = await finishOrganizationSetup(profile, memberships, input, consent.accepted, setProfile)
+      completeOrgOnboarding(user.id, input, organizationId)
+      retry()
+      toast(`${input.name} is live on IndyTeer.`)
+      navigate('/org', { replace: true })
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not create your organization. Try again.', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <OnboardingLayout>
       <p className="text-sm font-semibold text-navy-700">Step {step + 1} of {STEPS.length}</p>
       <h1 className="mt-1 mb-6 text-[26px] leading-tight">Set up your organization</h1>
+      <p className="-mt-3 mb-6 text-sm text-muted">Not the right account type? <Link to="/onboarding/account-type" className="font-semibold text-navy-700 hover:underline">Change it</Link></p>
       <Stepper steps={STEPS} current={step} />
 
       <Card className="p-6 sm:p-8">
@@ -93,13 +113,14 @@ export default function OrgOnboardingPage() {
               <TextInput label="Contact email" type="email" value={f.email} onChange={(e) => set('email', e.target.value)} error={errors.email} />
               <TextInput label="Phone number" optional type="tel" placeholder="(317) 555-0100" value={f.phone} onChange={(e) => set('phone', e.target.value)} error={errors.phone} />
             </div>
+            {consent.needed && <TermsConsent checked={consent.checked} onChange={consent.setChecked} error={errors.terms} />}
           </div>
         )}
       </Card>
 
       <div className="mt-6 flex justify-between">
         <Button variant="secondary" size="lg" disabled={step === 0} onClick={() => setStep(step - 1)}><ArrowLeft size={16} /> Back</Button>
-        <Button variant={step === STEPS.length - 1 ? 'accent' : 'primary'} size="lg" onClick={next}>
+        <Button variant={step === STEPS.length - 1 ? 'accent' : 'primary'} size="lg" disabled={saving} onClick={() => void next()}>
           {step === STEPS.length - 1 ? 'Launch organization' : <>Continue <ArrowRight size={16} /></>}
         </Button>
       </div>
