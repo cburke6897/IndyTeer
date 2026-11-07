@@ -41,6 +41,7 @@ export default function ProfileOnboardingPage() {
       if (!f.lastName.trim()) e.lastName = 'Required'
       if (!f.city) e.city = 'Choose your city.'
       if (f.bio.trim().length < 20) e.bio = 'Tell us a little more (at least 20 characters).'
+      if (!f.dob) e.dob = 'Enter your date of birth.'
     }
     if (s === 1) {
       if (!f.interests.length) e.interests = 'Pick at least one area of interest.'
@@ -99,7 +100,7 @@ export default function ProfileOnboardingPage() {
               </SelectInput>
               <TextInput label="State" value="Indiana" disabled readOnly />
             </div>
-            <TextInput label="Date of birth" optional type="date" value={f.dob} onChange={(e) => set('dob', e.target.value)} error={errors.dob} hint="Only used to check age requirements. Never shown publicly." />
+            <TextInput label="Date of birth" required type="date" value={f.dob} onChange={(e) => set('dob', e.target.value)} error={errors.dob} hint="Only used to check age requirements. Never shown publicly." />
             <TextArea label="Short bio" placeholder="What motivates you to volunteer? What do you enjoy doing?" value={f.bio} onChange={(e) => set('bio', e.target.value)} error={errors.bio} maxLength={400} hint={`${f.bio.length}/400`} />
           </div>
         )}

@@ -10,7 +10,7 @@ import type { User } from '../types/models'
 const user = (onboarded: boolean) => ({ id: 'u1', onboarded, full_name: 'Kai R' }) as User
 const volunteerData = {
   firstName: 'Kai', lastName: 'Rivera', city: 'Carmel', bio: 'Loves the outdoors and teaching.',
-  interests: ['Education'], skills: ['Tutoring'], phone: '', availability: 'Weekends',
+  interests: ['Education'], skills: ['Tutoring'], phone: '', availability: 'Weekends', dateOfBirth: '1995-01-01',
 }
 const orgData = {
   name: 'Hoosier Harvest', type: 'Nonprofit', description: 'Feeds neighbors.', mission: 'Food for all.',

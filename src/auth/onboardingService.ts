@@ -20,8 +20,8 @@ export interface VolunteerOnboardingData {
   skills: string[]
   phone: string
   availability: string
-  /** YYYY-MM-DD, optional. Needed to register for age-restricted opportunities. */
-  dateOfBirth?: string
+  /** Required YYYY-MM-DD. Used to check age requirements for opportunities. */
+  dateOfBirth: string
 }
 
 export async function finishVolunteerOnboarding(
@@ -37,7 +37,7 @@ export async function finishVolunteerOnboarding(
     bio: data.bio,
     city: data.city,
     state: 'IN',
-    date_of_birth: data.dateOfBirth || null,
+    date_of_birth: data.dateOfBirth,
     phone: data.phone || null,
     availability: data.availability ? { summary: data.availability } : {},
     interests: data.interests,
