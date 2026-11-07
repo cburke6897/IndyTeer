@@ -48,7 +48,7 @@ describe('route guards follow the standard-user model', () => {
   it('waits for the session instead of redirecting while loading', () => {
     state.loading = true
     renderAt('/app')
-    expect(screen.getByRole('status')).toHaveTextContent('Checking your session')
+    expect(screen.getByRole('status')).toHaveTextContent('Loading your account')
     expect(screen.queryByText('login page')).not.toBeInTheDocument()
   })
 
