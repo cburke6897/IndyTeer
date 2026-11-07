@@ -1,148 +1,131 @@
--- IndyTeer demo seed data
+-- IndyTeer development/staging demo data. Never run this seed in production.
 --
--- Before running this file:
--- 1. Create 4 organization accounts and 6 volunteer accounts in the app/Auth.
--- 2. Copy each account's Auth user ID (UUID) into the matching fill-in below.
--- 3. Replace every <..._ID> value in this file. Leave the quotes around each UUID.
--- 4. Run this file once from the Supabase SQL Editor.
---
--- This file intentionally does not create auth.users or profiles. The signup
--- trigger should create each profile; this script updates those existing rows.
+-- Create 4 organization-owner Auth users and 6 volunteer Auth users first.
+-- Replace every <..._ID> with the corresponding auth.users.id UUID, retaining quotes.
+-- This script expects the signup trigger to have created public.users rows.
+-- Run once; opportunities/posts are demo fixtures and are not idempotent.
 
 begin;
 
--- Stop before any updates if fill-ins remain or an Auth-created profile is missing.
 do $$
-declare
-  missing_ids text[] := array[]::text[];
-  missing_profiles text[] := array[]::text[];
-  demo_id text;
+declare missing_ids text[] := array[]::text[]; missing_users text[] := array[]::text[]; user_id_text text;
 begin
-  foreach demo_id in array array[
-    '<ORG_EASTSIDE_ID>', '<ORG_FOUNTAIN_SQUARE_ID>', '<ORG_WHITE_RIVER_ID>', '<ORG_SENIOR_COMPANIONS_ID>',
+  foreach user_id_text in array array[
+    '<ORG_EASTSIDE_OWNER_ID>', '<ORG_FOUNTAIN_SQUARE_OWNER_ID>', '<ORG_WHITE_RIVER_OWNER_ID>', '<ORG_SENIOR_COMPANIONS_OWNER_ID>',
     '<VOLUNTEER_01_ID>', '<VOLUNTEER_02_ID>', '<VOLUNTEER_03_ID>', '<VOLUNTEER_04_ID>', '<VOLUNTEER_05_ID>', '<VOLUNTEER_06_ID>'
   ] loop
-    if demo_id like '<%_ID>' then
-      missing_ids := array_append(missing_ids, demo_id);
-    elsif not exists (select 1 from public.profiles where id = demo_id::uuid) then
-      missing_profiles := array_append(missing_profiles, demo_id);
+    if user_id_text like '<%_ID>' then
+      missing_ids := array_append(missing_ids, user_id_text);
+    elsif not exists (select 1 from public.users where id = user_id_text::uuid) then
+      missing_users := array_append(missing_users, user_id_text);
     end if;
   end loop;
-
   if cardinality(missing_ids) > 0 then
-    raise exception 'Replace all ID fill-ins before running supabase/seed.sql. Still missing: %', array_to_string(missing_ids, ', ');
+    raise exception 'Replace every ID fill-in before running seed.sql: %', array_to_string(missing_ids, ', ');
   end if;
-  if cardinality(missing_profiles) > 0 then
-    raise exception 'These Auth users do not have profiles yet. Finish signup/profile creation first: %', array_to_string(missing_profiles, ', ');
+  if cardinality(missing_users) > 0 then
+    raise exception 'These Auth users need signup/profile rows first: %', array_to_string(missing_users, ', ');
   end if;
 end;
 $$;
 
--- Four fictional organizations. Replace the ID in each WHERE clause.
-update public.profiles set
-  account_type = 'organization', full_name = 'Eastside Community Pantry',
-  headline = 'Fighting hunger on the Near Eastside', neighborhood = 'Near Eastside',
-  bio = 'A neighborhood pantry connecting local families with fresh food and caring neighbors.',
-  causes = array['Hunger & Food'], skills = array['Food sorting', 'Community outreach']
-where id = '<ORG_EASTSIDE_ID>'::uuid;
+-- Give the demo volunteer users useful public profiles.
+update public.users set full_name='Jordan Lee', first_name='Jordan', last_name='Lee', headline='Weekend food pantry volunteer',
+  city='Indianapolis', interests=array['Hunger & Food'], skills=array['Food sorting','Delivery'], onboarded=true, public_profile=true
+where id='<VOLUNTEER_01_ID>'::uuid;
+update public.users set full_name='Sam Patel', first_name='Sam', last_name='Patel', headline='Reading mentor and book lover',
+  city='Indianapolis', interests=array['Education & Youth'], skills=array['Tutoring','Reading'], onboarded=true, public_profile=true
+where id='<VOLUNTEER_02_ID>'::uuid;
+update public.users set full_name='Taylor Brooks', first_name='Taylor', last_name='Brooks', headline='Keeping Indy green',
+  city='Indianapolis', interests=array['Environment'], skills=array['Cleanup','Planting'], onboarded=true, public_profile=true
+where id='<VOLUNTEER_03_ID>'::uuid;
+update public.users set full_name='Morgan Chen', first_name='Morgan', last_name='Chen', headline='Neighbor, gardener, and helper',
+  city='Indianapolis', interests=array['Seniors','Environment'], skills=array['Gardening','Technology help'], onboarded=true, public_profile=true
+where id='<VOLUNTEER_04_ID>'::uuid;
+update public.users set full_name='Alex Rivera', first_name='Alex', last_name='Rivera', headline='Making community events happen',
+  city='Indianapolis', interests=array['Community Events','Arts & Culture'], skills=array['Event setup','Photography'], onboarded=true, public_profile=true
+where id='<VOLUNTEER_05_ID>'::uuid;
+update public.users set full_name='Casey Johnson', first_name='Casey', last_name='Johnson', headline='Here to lend a hand',
+  city='Indianapolis', interests=array['Health','Housing & Homelessness'], skills=array['Outreach','Cooking'], onboarded=true, public_profile=true
+where id='<VOLUNTEER_06_ID>'::uuid;
 
-update public.profiles set
-  account_type = 'organization', full_name = 'Fountain Square Reading Buddies',
-  headline = 'Helping young readers grow', neighborhood = 'Fountain Square',
-  bio = 'Volunteer-led reading time and book access for children in our neighborhood.',
-  causes = array['Education & Youth', 'Arts & Culture'], skills = array['Tutoring', 'Reading']
-where id = '<ORG_FOUNTAIN_SQUARE_ID>'::uuid;
-
-update public.profiles set
-  account_type = 'organization', full_name = 'White River Cleanup Crew',
-  headline = 'Keeping the river and trails welcoming', neighborhood = 'Downtown',
-  bio = 'Neighbors caring for the White River, its trails, and nearby habitats.',
-  causes = array['Environment', 'Community Events'], skills = array['Cleanup', 'Gardening']
-where id = '<ORG_WHITE_RIVER_ID>'::uuid;
-
-update public.profiles set
-  account_type = 'organization', full_name = 'Indy Senior Companions',
-  headline = 'Building connection across generations', neighborhood = 'Meridian-Kessler',
-  bio = 'Friendly visits and practical support that help older neighbors stay connected.',
-  causes = array['Seniors', 'Health'], skills = array['Conversation', 'Technology help']
-where id = '<ORG_SENIOR_COMPANIONS_ID>'::uuid;
-
--- Six fictional volunteer profiles. Replace the ID in each WHERE clause.
-update public.profiles set
-  account_type = 'volunteer', full_name = 'Jordan Lee', headline = 'Weekend food pantry volunteer',
-  neighborhood = 'Near Eastside', causes = array['Hunger & Food'], skills = array['Food sorting', 'Delivery']
-where id = '<VOLUNTEER_01_ID>'::uuid;
-
-update public.profiles set
-  account_type = 'volunteer', full_name = 'Sam Patel', headline = 'Reading mentor and book lover',
-  neighborhood = 'Fountain Square', causes = array['Education & Youth'], skills = array['Tutoring', 'Reading']
-where id = '<VOLUNTEER_02_ID>'::uuid;
-
-update public.profiles set
-  account_type = 'volunteer', full_name = 'Taylor Brooks', headline = 'Keeping Indy green',
-  neighborhood = 'Downtown', causes = array['Environment'], skills = array['Cleanup', 'Planting']
-where id = '<VOLUNTEER_03_ID>'::uuid;
-
-update public.profiles set
-  account_type = 'volunteer', full_name = 'Morgan Chen', headline = 'Neighbor, gardener, and helper',
-  neighborhood = 'Irvington', causes = array['Seniors', 'Environment'], skills = array['Gardening', 'Technology help']
-where id = '<VOLUNTEER_04_ID>'::uuid;
-
-update public.profiles set
-  account_type = 'volunteer', full_name = 'Alex Rivera', headline = 'Making community events happen',
-  neighborhood = 'Mass Ave', causes = array['Community Events', 'Arts & Culture'], skills = array['Event setup', 'Photography']
-where id = '<VOLUNTEER_05_ID>'::uuid;
-
-update public.profiles set
-  account_type = 'volunteer', full_name = 'Casey Johnson', headline = 'Here to lend a hand',
-  neighborhood = 'Broad Ripple', causes = array['Health', 'Housing & Homelessness'], skills = array['Outreach', 'Cooking']
-where id = '<VOLUNTEER_06_ID>'::uuid;
-
--- Twelve opportunities across causes and neighborhoods. Relative dates keep the demo current.
-insert into public.opportunities (org_id, title, description, cause, neighborhood, address, starts_at, ends_at, spots)
+-- Four fictional organizations. Users can own multiple organizations in normal app use.
+insert into public.organizations (created_by,name,type,description,mission,city,state,focus,verified,join_policy)
 values
-  ('<ORG_EASTSIDE_ID>'::uuid, 'Saturday Pantry Sort and Pack', 'Sort donations and pack grocery boxes for local families. No experience needed.', 'Hunger & Food', 'Near Eastside', 'East Washington Street', now() + interval '7 days', now() + interval '7 days 3 hours', 12),
-  ('<ORG_EASTSIDE_ID>'::uuid, 'Fresh Food Delivery Route', 'Deliver prepared grocery bags to neighbors who cannot visit the pantry.', 'Hunger & Food', 'Irvington', 'Eastside Community Pantry', now() + interval '10 days', now() + interval '10 days 3 hours', 6),
-  ('<ORG_EASTSIDE_ID>'::uuid, 'Community Garden Harvest', 'Help harvest seasonal produce for the pantry shelves.', 'Hunger & Food', 'Garfield Park', 'Garfield Park Community Garden', now() + interval '14 days', now() + interval '14 days 2 hours', 8),
-  ('<ORG_FOUNTAIN_SQUARE_ID>'::uuid, 'After-School Reading Hour', 'Read one-on-one with elementary students in a welcoming library room.', 'Education & Youth', 'Fountain Square', 'Fountain Square Library', now() + interval '5 days', now() + interval '5 days 2 hours', 5),
-  ('<ORG_FOUNTAIN_SQUARE_ID>'::uuid, 'Little Free Library Refresh', 'Sort donated books and refresh neighborhood book boxes.', 'Education & Youth', 'Fletcher Place', 'Fountain Square Reading Room', now() + interval '9 days', now() + interval '9 days 3 hours', 10),
-  ('<ORG_FOUNTAIN_SQUARE_ID>'::uuid, 'Family Storytime Helpers', 'Welcome families and help children choose books during storytime.', 'Arts & Culture', 'Fountain Square', 'Southside Community Center', now() + interval '12 days', now() + interval '12 days 2 hours', 4),
-  ('<ORG_WHITE_RIVER_ID>'::uuid, 'White River Trail Cleanup', 'Collect litter along an easy section of the river trail. Gloves and bags provided.', 'Environment', 'Downtown', 'White River State Park entrance', now() + interval '6 days', now() + interval '6 days 2 hours', 20),
-  ('<ORG_WHITE_RIVER_ID>'::uuid, 'Native Planting Morning', 'Plant native flowers to support pollinators near the river.', 'Environment', 'Downtown', 'White River trail garden', now() + interval '11 days', now() + interval '11 days 3 hours', 10),
-  ('<ORG_WHITE_RIVER_ID>'::uuid, 'Trail Welcome Table', 'Share trail maps and cleanup information with visitors at a community event.', 'Community Events', 'Mass Ave', 'Canal Walk welcome tent', now() + interval '16 days', now() + interval '16 days 4 hours', 6),
-  ('<ORG_SENIOR_COMPANIONS_ID>'::uuid, 'Friendly Tech Help Visits', 'Help older neighbors with phones, video calls, and basic device settings.', 'Seniors', 'Meridian-Kessler', 'Meridian-Kessler Community Center', now() + interval '8 days', now() + interval '8 days 2 hours', 5),
-  ('<ORG_SENIOR_COMPANIONS_ID>'::uuid, 'Community Lunch Companions', 'Share lunch and conversation with older adults at a neighborhood gathering.', 'Seniors', 'Broad Ripple', 'Broad Ripple Community House', now() + interval '13 days', now() + interval '13 days 2 hours', 8),
-  ('<ORG_SENIOR_COMPANIONS_ID>'::uuid, 'Accessible Garden Walk', 'Join older neighbors for a relaxed garden visit and help with light setup.', 'Health', 'Meridian-Kessler', 'Northside Community Garden', now() + interval '18 days', now() + interval '18 days 2 hours', 6);
+  ('<ORG_EASTSIDE_OWNER_ID>'::uuid,'Eastside Community Pantry','Community nonprofit','A neighborhood pantry connecting families with fresh food and caring neighbors.','Make nutritious food accessible to every neighbor.','Indianapolis','IN',array['Hunger & Food'],true,'approval'),
+  ('<ORG_FOUNTAIN_SQUARE_OWNER_ID>'::uuid,'Fountain Square Reading Buddies','Education nonprofit','Volunteer-led reading time and book access for children.','Help young readers grow through time, stories, and encouragement.','Indianapolis','IN',array['Education & Youth','Arts & Culture'],true,'approval'),
+  ('<ORG_WHITE_RIVER_OWNER_ID>'::uuid,'White River Cleanup Crew','Community group','Neighbors caring for the White River, trails, and nearby habitats.','Keep local waterways and trails welcoming.','Indianapolis','IN',array['Environment','Community Events'],true,'invite_only'),
+  ('<ORG_SENIOR_COMPANIONS_OWNER_ID>'::uuid,'Indy Senior Companions','Community nonprofit','Friendly visits and practical support for older neighbors.','Build connection across generations.','Indianapolis','IN',array['Seniors','Health'],true,'approval');
 
--- Six applications: two pending, two accepted, and two declined.
-insert into public.applications (opportunity_id, volunteer_id, message, status)
-select o.id, seed.volunteer_id::uuid, seed.message, seed.status::public.application_status
+insert into public.organization_memberships (organization_id,user_id,role,status)
+select id,created_by,'owner','active' from public.organizations
+where name in ('Eastside Community Pantry','Fountain Square Reading Buddies','White River Cleanup Crew','Indy Senior Companions')
+on conflict (organization_id,user_id) do nothing;
+
+insert into public.opportunities (organization_id,title,description,category,city,location,address,starts_at,ends_at,
+  event_date,start_time,end_time,timezone,registration_deadline,spots,status)
+select o.id,s.title,s.description,s.category,s.city,s.location,s.address,
+  (s.event_date+s.start_time) at time zone s.timezone,
+  (s.event_date+s.end_time) at time zone s.timezone,
+  s.event_date,s.start_time,s.end_time,s.timezone,s.event_date-1,s.spots,'published'
 from (values
-  ('Saturday Pantry Sort and Pack', '<VOLUNTEER_01_ID>', 'Happy to help with sorting and packing.', 'pending'),
-  ('After-School Reading Hour', '<VOLUNTEER_02_ID>', 'I enjoy reading with kids and can come weekly.', 'pending'),
-  ('White River Trail Cleanup', '<VOLUNTEER_03_ID>', 'I can bring a reusable water bottle and work gloves.', 'accepted'),
-  ('Friendly Tech Help Visits', '<VOLUNTEER_04_ID>', 'I can help with phones and video calls.', 'accepted'),
-  ('Fresh Food Delivery Route', '<VOLUNTEER_05_ID>', 'I have a schedule conflict this time, but would love to help later.', 'declined'),
-  ('Family Storytime Helpers', '<VOLUNTEER_06_ID>', 'Please keep me in mind for a future session.', 'declined')
-) as seed(opportunity_title, volunteer_id, message, status)
-join public.opportunities o on o.title = seed.opportunity_title;
+  ('Eastside Community Pantry','Saturday Pantry Sort and Pack','Sort donations and pack grocery boxes for local families. No experience needed.','Hunger & Food','Indianapolis','Pantry warehouse','East Washington Street',current_date+7,time '09:00',time '12:00','America/Indiana/Indianapolis',12),
+  ('Eastside Community Pantry','Fresh Food Delivery Route','Deliver grocery bags to neighbors who cannot visit the pantry.','Hunger & Food','Indianapolis','Pantry pickup','East Washington Street',current_date+10,time '10:00',time '13:00','America/Indiana/Indianapolis',6),
+  ('Eastside Community Pantry','Community Garden Harvest','Harvest seasonal produce for pantry shelves.','Hunger & Food','Indianapolis','Garfield Park Garden','Garfield Park',current_date+14,time '08:00',time '10:00','America/Indiana/Indianapolis',8),
+  ('Fountain Square Reading Buddies','After-School Reading Hour','Read one-on-one with elementary students in a welcoming library room.','Education & Youth','Indianapolis','Fountain Square Library','Fountain Square',current_date+5,time '15:00',time '17:00','America/Indiana/Indianapolis',5),
+  ('Fountain Square Reading Buddies','Little Free Library Refresh','Sort donated books and refresh neighborhood book boxes.','Education & Youth','Indianapolis','Reading Room','Fletcher Place',current_date+9,time '09:00',time '12:00','America/Indiana/Indianapolis',10),
+  ('Fountain Square Reading Buddies','Family Storytime Helpers','Welcome families and help children choose books during storytime.','Arts & Culture','Indianapolis','Southside Community Center','Fountain Square',current_date+12,time '10:00',time '12:00','America/Indiana/Indianapolis',4),
+  ('White River Cleanup Crew','White River Trail Cleanup','Collect litter along an easy section of river trail. Supplies provided.','Environment','Indianapolis','White River Trail','White River State Park',current_date+6,time '09:00',time '11:00','America/Indiana/Indianapolis',20),
+  ('White River Cleanup Crew','Native Planting Morning','Plant native flowers to support pollinators near the river.','Environment','Indianapolis','Trail garden','White River State Park',current_date+11,time '08:00',time '11:00','America/Indiana/Indianapolis',10),
+  ('White River Cleanup Crew','Trail Welcome Table','Share trail maps and cleanup information with visitors.','Community Events','Indianapolis','Canal Walk welcome tent','Downtown',current_date+16,time '10:00',time '14:00','America/Indiana/Indianapolis',6),
+  ('Indy Senior Companions','Friendly Tech Help Visits','Help older neighbors with phones, video calls, and basic settings.','Seniors','Indianapolis','Meridian-Kessler Community Center','Meridian-Kessler',current_date+8,time '13:00',time '15:00','America/Indiana/Indianapolis',5),
+  ('Indy Senior Companions','Community Lunch Companions','Share lunch and conversation at a neighborhood gathering.','Seniors','Indianapolis','Broad Ripple Community House','Broad Ripple',current_date+13,time '11:00',time '13:00','America/Indiana/Indianapolis',8),
+  ('Indy Senior Companions','Accessible Garden Walk','Join older neighbors for a relaxed garden visit and light setup.','Health','Indianapolis','Northside Community Garden','Meridian-Kessler',current_date+18,time '09:00',time '11:00','America/Indiana/Indianapolis',6)
+) as s(org_name,title,description,category,city,location,address,event_date,start_time,end_time,timezone,spots)
+join public.organizations o on o.name=s.org_name;
 
--- Fifteen feed posts. Replace each author ID with the matching Auth user ID.
-insert into public.posts (author_id, body) values
-  ('<ORG_EASTSIDE_ID>'::uuid, 'This week our neighbors helped pack 42 grocery boxes. Thank you for showing up for one another!'),
-  ('<VOLUNTEER_01_ID>'::uuid, 'A good morning at the pantry today. I learned how much teamwork goes into every grocery box.'),
-  ('<ORG_FOUNTAIN_SQUARE_ID>'::uuid, 'Our reading corner is ready for another afternoon of stories, questions, and big imaginations.'),
-  ('<VOLUNTEER_02_ID>'::uuid, 'Reading together is a small thing that can make a young reader feel seen.'),
-  ('<ORG_WHITE_RIVER_ID>'::uuid, 'Cleanup crew update: we filled several bags and spotted new birds along the trail.'),
-  ('<VOLUNTEER_03_ID>'::uuid, 'The river trail is looking brighter after this morning’s community cleanup.'),
-  ('<ORG_SENIOR_COMPANIONS_ID>'::uuid, 'A reminder that a friendly visit and a little patience can make technology feel less intimidating.'),
-  ('<VOLUNTEER_04_ID>'::uuid, 'Helped someone set up a video call with family today. That smile made my afternoon.'),
-  ('<VOLUNTEER_05_ID>'::uuid, 'I love seeing different neighborhood groups share ideas and volunteers.'),
-  ('<VOLUNTEER_06_ID>'::uuid, 'Looking for a low-pressure way to meet neighbors? A community event shift is a great start.'),
-  ('<ORG_EASTSIDE_ID>'::uuid, 'The garden harvest is coming up. We could use a few extra hands and plenty of baskets.'),
-  ('<ORG_FOUNTAIN_SQUARE_ID>'::uuid, 'We received a lovely stack of gently used children’s books. Thank you, book donors!'),
-  ('<ORG_WHITE_RIVER_ID>'::uuid, 'Native planting day is on the calendar. We will provide tools and a quick walkthrough.'),
-  ('<ORG_SENIOR_COMPANIONS_ID>'::uuid, 'Our community lunch is about good food, easy conversation, and making room at the table.'),
-  ('<VOLUNTEER_02_ID>'::uuid, 'One of my favorite parts of volunteering is discovering how much our neighborhoods already care.');
+insert into public.registrations (opportunity_id,user_id,message,status)
+select o.id,s.user_id::uuid,s.message,s.status::public.registration_status
+from (values
+  ('Saturday Pantry Sort and Pack','<VOLUNTEER_01_ID>','Happy to help with sorting and packing.','pending'),
+  ('After-School Reading Hour','<VOLUNTEER_02_ID>','I enjoy reading with kids and can come weekly.','pending'),
+  ('White River Trail Cleanup','<VOLUNTEER_03_ID>','I can bring water and work gloves.','approved'),
+  ('Friendly Tech Help Visits','<VOLUNTEER_04_ID>','I can help with phones and video calls.','approved'),
+  ('Fresh Food Delivery Route','<VOLUNTEER_05_ID>','I have a schedule conflict this time, but would love to help later.','declined'),
+  ('Family Storytime Helpers','<VOLUNTEER_06_ID>','Please keep me in mind for a future session.','declined')
+) as s(title,user_id,message,status)
+join public.opportunities o on o.title=s.title
+on conflict (opportunity_id,user_id) do nothing;
+
+insert into public.organization_follows(user_id,organization_id)
+select f.user_id::uuid,o.id from (values
+  ('<VOLUNTEER_01_ID>','Eastside Community Pantry'),
+  ('<VOLUNTEER_02_ID>','Fountain Square Reading Buddies'),
+  ('<VOLUNTEER_03_ID>','White River Cleanup Crew'),
+  ('<VOLUNTEER_04_ID>','Indy Senior Companions'),
+  ('<VOLUNTEER_05_ID>','Eastside Community Pantry')
+) as f(user_id,org_name) join public.organizations o on o.name=f.org_name
+on conflict (user_id,organization_id) do nothing;
+
+-- Fifteen organization posts for the public feed.
+insert into public.posts(author_user_id,organization_id,title,kind,body)
+select o.created_by,o.id,p.title,'update',p.body
+from (values
+  ('Eastside Community Pantry','Pantry packing day','This week our neighbors packed 42 grocery boxes. Thank you for showing up for one another!'),
+  ('Fountain Square Reading Buddies','Reading corner ready','Our reading corner is ready for another afternoon of stories, questions, and big imaginations.'),
+  ('White River Cleanup Crew','Trail cleanup update','Cleanup crew update: we filled several bags and spotted new birds along the trail.'),
+  ('Indy Senior Companions','Friendly tech help','A friendly visit and a little patience can make technology feel less intimidating.'),
+  ('Eastside Community Pantry','Garden harvest coming up','The garden harvest is coming up. We could use a few extra hands and plenty of baskets.'),
+  ('Fountain Square Reading Buddies','Book donations','We received a lovely stack of gently used children’s books. Thank you, book donors!'),
+  ('White River Cleanup Crew','Native planting day','Native planting day is on the calendar. We will provide tools and a quick walkthrough.'),
+  ('Indy Senior Companions','Community lunch','Our community lunch is about good food, easy conversation, and making room at the table.'),
+  ('Eastside Community Pantry','Neighbors helping neighbors','Small acts of care add up. Thanks to everyone who helped sort donations today.'),
+  ('Fountain Square Reading Buddies','Storytime volunteers','Storytime works because volunteers make every family feel welcome.'),
+  ('White River Cleanup Crew','River wildlife','We saw more birds along the river this week. Thanks for helping keep their habitat clean.'),
+  ('Indy Senior Companions','Visit reminders','A quick check-in can brighten a neighbor’s day. Sign up for a friendly visit this month.'),
+  ('Eastside Community Pantry','Food drive thanks','Thanks to local donors for keeping the pantry shelves stocked for the coming week.'),
+  ('Fountain Square Reading Buddies','Little libraries','We refreshed several neighborhood book boxes with new stories for young readers.'),
+  ('White River Cleanup Crew','Community care','We love seeing neighbors share ideas and lend a hand to care for the places we share.')
+) as p(org_name,title,body) join public.organizations o on o.name=p.org_name;
 
 commit;
