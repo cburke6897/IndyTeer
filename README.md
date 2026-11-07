@@ -1,78 +1,45 @@
-# React + TypeScript + Vite
+# IndyTeer Auth and Media
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This Vite and React implementation covers the Auth & Media Lead assignment: email signup, login, persistent sessions, a protected profile route, and avatar upload to Supabase Storage. It uses the current starter app as a working demonstration; connect the protected route and avatar component to the team's opportunity pages when those routes are added.
 
-Currently, two official plugins are available:
+## Run the app
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+1. In Supabase, create a project and copy its Project URL and **publishable** API key.
+2. Copy `.env.example` to `.env.local` and replace both example values. Keep `.env.local` out of Git. A publishable key is expected in browser code; never put a `service_role` or secret key in any `VITE_` variable.
+3. In Supabase **Authentication → URL Configuration**, set the Site URL to `http://localhost:5173` and add `http://localhost:5173/**` to the redirect URL allow list. Add the deployed app's HTTPS origin there before deploying.
+4. In **Authentication → Sign In / Providers**, enable Email and leave email confirmation on for the PKCE signup flow. Signup shows a confirmation message; the user logs in after following the link. The confirmation redirect must be allow-listed.
+5. Run `supabase/migrations/20261107000100_auth_media.sql` in the Supabase SQL Editor. This creates the public `avatars` bucket with a 5 MB limit and JPEG/PNG/WebP restrictions, then limits upload and replacement to each user's own folder.
+6. Run `npm install`, then `npm run dev` and open the local Vite URL.
 
-## React Compiler
+The `AuthProvider` reads the saved Supabase session on startup and follows sign-in and sign-out events. The client explicitly enables PKCE, session persistence, URL callback detection, and token refresh. `RequireAuth` waits for that session check before redirecting unauthenticated visitors to `/login`.
 
-The React Compiler is enabled on this template. See [this documentation](https://react.dev/learn/react-compiler) for more information.
+## Included routes and components
 
-Note: This will impact Vite dev & build performances.
-You can also try [the experimental native React Compiler support in plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md#rust-react-compiler) by using `compiler: true` in the plugin options instead of using the Babel plugin.
+- `/signup` and `/login`: email/password forms, display name metadata, and email confirmation handling.
+- `/profile`: protected demo route with current account details, logout, and avatar uploader.
+- `src/auth/AuthProvider.tsx`: shared session state and auth actions.
+- `src/routes/RequireAuth.tsx`: React Router guard. It protects page display only; it is not an API security boundary.
+- `src/media/avatarService.ts`: image validation, per-user upload/replace, and avatar URL saved in the user's editable auth metadata.
+- `supabase/migrations/20261107000100_auth_media.sql`: bucket configuration and Storage row-level security policies.
 
-## Expanding the ESLint configuration
+To use the guard for an existing route, nest its route under `<Route element={<RequireAuth />}>` in `src/App.tsx`. Use `useAuth()` in page components to read `user`, `session`, and `loading`, or to call `signIn`, `signUp`, and `signOut`. Add `<AvatarUploader />` to the signed-in profile screen.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Security notes
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- The `avatars` bucket is public so profile photos can render without signed URLs. Anyone who has an avatar URL can view that image. Uploads and replacements still require a signed-in user and Storage RLS restricts each object to a path beginning with that user's Auth ID.
+- The client rejects unsupported types and files over 5 MB. The bucket repeats these restrictions on the server.
+- `user_metadata` is user-editable. The included code stores only display name and avatar fields there; do not use it to authorize volunteer/organization roles.
+- A React route guard only controls what the browser displays. If the team adds an Express API, verify the Supabase access token on every protected API request and enforce authorization on the server. Never trust a role or user ID supplied only by the browser.
+- The existing project folder has no API server, database integration, opportunity pages, or profile table yet. The avatar URL is saved in Supabase Auth user metadata so this assignment works independently; if the team adds a profile table later, store `avatar_path` there and treat `avatar_url` as a derived display value.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Tests and checks
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Run:
 
+```sh
+npm test
+npm run build
+npm run lint
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
-```
+The tests cover the auth form flows, client session-persistence configuration, signup/login/logout requests, session hydration and auth events, route protection, and avatar validation/upload behavior.
