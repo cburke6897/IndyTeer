@@ -5,7 +5,7 @@ This Vite and React implementation covers the Auth & Media Lead assignment: emai
 ## Run the app
 
 1. In Supabase, create a project and copy its Project URL and **publishable** API key.
-2. Copy `.env.example` to `.env.local` and replace both example values. Keep `.env.local` out of Git. A publishable key is expected in browser code; never put a `service_role` or secret key in any `VITE_` variable.
+2. Copy `.env.example` to `.env.local` and replace both example values. Use `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, matching the backend configuration. The latter holds the browser-safe publishable key; the previous `VITE_SUPABASE_PUBLISHABLE_KEY` name remains a fallback. Keep `.env.local` out of Git. A publishable key is expected in browser code; never put a `service_role` or secret key in any `VITE_` variable.
 3. In Supabase **Authentication → URL Configuration**, set the Site URL to `http://localhost:5173` and add `http://localhost:5173/**` to the redirect URL allow list. Add the deployed app's HTTPS origin there before deploying.
 4. In **Authentication → Sign In / Providers**, enable Email and leave email confirmation on for the PKCE signup flow. Signup shows a confirmation message; the user logs in after following the link. The confirmation redirect must be allow-listed.
 5. Run `supabase/migrations/20261107000100_auth_media.sql` in the Supabase SQL Editor. This creates the public `avatars` bucket with a 5 MB limit and JPEG/PNG/WebP restrictions, then limits upload and replacement to each user's own folder.
@@ -30,7 +30,7 @@ To use the guard for an existing route, nest its route under `<Route element={<R
 - The client rejects unsupported types and files over 5 MB. The bucket repeats these restrictions on the server.
 - `user_metadata` is user-editable. The included code stores only display name and avatar fields there; do not use it to authorize volunteer/organization roles.
 - A React route guard only controls what the browser displays. If the team adds an Express API, verify the Supabase access token on every protected API request and enforce authorization on the server. Never trust a role or user ID supplied only by the browser.
-- The existing project folder has no API server, database integration, opportunity pages, or profile table yet. The avatar URL is saved in Supabase Auth user metadata so this assignment works independently; if the team adds a profile table later, store `avatar_path` there and treat `avatar_url` as a derived display value.
+- This branch now includes the backend Supabase data access layer and profiles schema from main. Its standalone auth pages still save avatars in Auth metadata. The complete frontend should also save the returned URL through `updateProfile({ avatar_url })`; the profiles row must exist first. Profile creation and onboarding contracts still need to be completed by the backend. See `docs/AUTH_MEDIA_INTEGRATION.md` for integration examples.
 
 ## Tests and checks
 

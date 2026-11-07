@@ -1,44 +1,18 @@
 # Auth and Media integration handoff
 
-Snapshot reviewed on November 7, 2026:
-- Auth and Media: `2c813ac` (`feat/auth-media`)
-- Main: `31d1abf`
-- Backend: `e7e23f0` (already included in main)
-- Frontend: `2698d41` (includes the backend data access commit)
+The Auth and Media branch now includes main at `31d1abf`, including the backend data access layer. The main merge conflicts have been resolved on this feature branch.
 
-## Merge readiness
+## Shared conventions selected
 
-The branches need manual conflict resolution and functional integration before merging to main as a working application.
+- Environment: use VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, matching the backend. Put the browser-safe publishable key in the ANON_KEY variable; the name does not require switching key types. VITE_SUPABASE_PUBLISHABLE_KEY remains a fallback for existing local setups. ANON_KEY wins if both are set.
+- Supabase: one createClient<Database> instance, combining backend database typing with explicit PKCE, session persistence, token refresh, and callback detection.
+- Models and APIs: use src/types/models.ts and src/lib/api/* from main. Keep generated database types for database requests; adapt them to frontend display models where needed.
+- Encoding: src/types/database.ts is now UTF-8. Its UTF-16 source compiled with TypeScript but caused ESLint to reject it as binary; only the encoding was changed.
+- Names: signup now sends full_name for the backend profile contract, while preserving display_name for existing consumers. Profile display prefers full_name with a display_name fallback.
+- Layout API: AuthLayout supports title, optional subtitle, children, and optional footer, matching the frontend component interface. During full UI integration, keep the complete frontend layout and route structure.
+- Keep the frontend Tailwind Vite plugin and Auth and Media Vitest configuration. Regenerate the lockfile after dependency changes.
 
-Auth and Media versus main has 3 conflict paths:
-- `.env.example`
-- `package-lock.json`
-- `src/lib/supabase.ts`
-
-Auth and Media versus frontend has 9 conflict paths:
-- `.env.example`
-- `README.md`
-- `package-lock.json`
-- `src/App.css` (deleted on frontend, modified on Auth and Media)
-- `src/App.tsx`
-- `src/components/layout/AuthLayout.tsx`
-- `src/components/ui/Logo.tsx`
-- `src/lib/supabase.ts`
-- `vite.config.ts`
-
-These were checked using Git merge-tree without changing any working branch.
-
-## Conflict resolution decisions
-
-- Use the frontend App routes, layout components, logo, and global theme as the final UI foundation.
-- Wrap the frontend routes in AuthProvider. Update the existing frontend guards and useSession adapter to consume the real session and database profile.
-- Keep one Supabase client. Combine the backend's createClient<Database> typing with Auth and Media's PKCE, persistence, refresh, and URL callback options.
-- Standardize on VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY. The backend currently reads VITE_SUPABASE_ANON_KEY; update that reference when combining the client.
-- Keep React, Supabase, lucide-react, Tailwind, and the test dependencies needed by both branches.
-- Merge package.json first, then regenerate the lockfile with npm install.
-- Keep the frontend Tailwind Vite plugin and Auth and Media Vitest configuration.
-- Preserve both sets of setup instructions in README.
-- The standalone HomePage, AuthPage, ProfilePage, and App.css in Auth and Media are demonstration UI. Use the frontend's complete pages as the integration target.
+The frontend integration still requires manual route/layout conflict resolution and replacement of mock auth actions. Matching names alone does not connect the application data flow.
 
 ## Frontend usage
 
@@ -95,7 +69,7 @@ await updateProfile({ avatar_url: publicUrl })
 
 uploadAvatar accepts a File, not the data URL currently returned by ImageUpload. Change the avatar picker to pass the original File, or add a separate File callback. Await Storage and profile updates before showing success, then refresh the UI profile cache.
 
-The service currently also saves avatar_url and avatar_path in Auth metadata. public.profiles.avatar_url should be the shared display field for the integrated application. The profiles row must exist before updateProfile can succeed.
+The service currently also saves avatar_url and avatar_path in Auth metadata. public.profiles.avatar_url should be the shared display field for the integrated application. The profiles row must exist before updateProfile can succeed. The standalone uploader still saves Auth metadata; the complete frontend must also call updateProfile as shown above.
 
 The public avatars bucket accepts JPEG, PNG, and WebP up to 5 MiB. The object path is user.id/avatar. Do not use this single-avatar helper for opportunity images, post images, or cover images: they need distinct paths and their own agreed policies.
 
@@ -103,7 +77,7 @@ The public avatars bucket accepts JPEG, PNG, and WebP up to 5 MiB. The object pa
 
 - The committed migration says profiles are created by a signup trigger, but does not define that trigger. Confirm the live database setup; version the trigger and backfill existing users if necessary. There is no profile INSERT policy or client createProfile method in the reviewed code.
 - Agree how account-type selection and onboarding completion are stored. The frontend expects nullable accountType and onboarded; the current profiles schema defaults account_type to volunteer and has no onboarded field.
-- Map the current signup metadata display_name to profiles.full_name, or agree on a shared metadata key and update signup accordingly.
+- Signup now sends full_name and display_name. The profile-creation mechanism should populate profiles.full_name from full_name (with display_name as a compatibility fallback).
 - Preserve profiles.id = auth.users.id throughout frontend and backend.
 - Map UI registration status approved to database accepted. The database also lacks the UI's cancelled and removed statuses; decide which workflows are supported.
 - Map opportunity fields category/image/date to cause/image_url/starts_at. UI draft/published and database open/closed have different meanings; do not silently treat closed as draft.
@@ -115,7 +89,7 @@ Fetch and check out feat/auth-media to review its standalone auth flow, then run
 
 Create .env.local from .env.example and set:
 - VITE_SUPABASE_URL to the team's project URL.
-- VITE_SUPABASE_PUBLISHABLE_KEY to the team's publishable key.
+- VITE_SUPABASE_ANON_KEY to the team's browser-safe publishable key.
 
 Never commit .env.local or put a secret/service-role key in VITE variables.
 

@@ -2,10 +2,11 @@ import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { Logo } from '../ui/Logo'
 
-export function AuthLayout({ title, subtitle, children }: {
+export function AuthLayout({ title, subtitle, children, footer }: {
   title: string
-  subtitle: string
+  subtitle?: string
   children: ReactNode
+  footer?: ReactNode
 }) {
   return (
     <div className="auth-shell">
@@ -23,8 +24,9 @@ export function AuthLayout({ title, subtitle, children }: {
         <Link className="brand mobile-brand" to="/" aria-label="IndyTeer home"><Logo /></Link>
         <section className="auth-card" aria-labelledby="auth-title">
           <h1 id="auth-title">{title}</h1>
-          <p className="muted auth-subtitle">{subtitle}</p>
+          {subtitle && <p className="muted auth-subtitle">{subtitle}</p>}
           {children}
+          {footer && <div className="switch-auth">{footer}</div>}
         </section>
       </main>
     </div>

@@ -9,7 +9,7 @@ export async function signUpWithEmail(
     email: email.trim(),
     password,
     options: {
-      data: { display_name: displayName.trim() },
+      data: { full_name: displayName.trim(), display_name: displayName.trim() },
       emailRedirectTo: window.location.origin,
     },
   })

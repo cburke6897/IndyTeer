@@ -32,7 +32,7 @@ describe('email auth actions', () => {
       email: 'volunteer@example.org',
       password: 'good-password',
       options: {
-        data: { display_name: 'Kai' },
+        data: { full_name: 'Kai', display_name: 'Kai' },
         emailRedirectTo: window.location.origin,
       },
     })

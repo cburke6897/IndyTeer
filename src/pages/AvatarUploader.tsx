@@ -11,8 +11,9 @@ export function AvatarUploader() {
   const savedAvatar = typeof user?.user_metadata?.avatar_url === 'string'
     ? user.user_metadata.avatar_url
     : null
-  const displayName = typeof user?.user_metadata?.display_name === 'string'
-    ? user.user_metadata.display_name
+  const metadataName = user?.user_metadata?.full_name ?? user?.user_metadata?.display_name
+  const displayName = typeof metadataName === 'string'
+    ? metadataName
     : user?.email ?? 'Volunteer'
 
   async function handleChange(event: ChangeEvent<HTMLInputElement>) {
