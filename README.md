@@ -16,7 +16,7 @@ Indiana's volunteer networking platform. Volunteers discover and register for op
 | Organizations, opportunities (drafts and published), registrations, attendance, verified hours, manual hours, follows, saved items, posts, notifications, notification and privacy settings | **Real: Supabase** (tables, RLS, and RPCs) |
 | Organization logo and cover images, opportunity images | **Real: Supabase Storage** (`org-logos`, `org-covers`, `opportunity-images`) |
 
-**There is no sample data.** The app starts empty: every organization, opportunity, volunteer, registration and hour in it was created by a real user. The client keeps only an in-memory cache of what the signed-in person is allowed to see (`src/store`); nothing is persisted in the browser, and an old prototype key in `localStorage` is removed on load. Organizations create data (organizations, opportunities, posts, approvals, attendance, verified hours); volunteers create data (profile, follows, saves, registrations, manual hours); each sees the other's through the database's access rules.
+**There is no sample data.** The app starts empty: every organization, opportunity, volunteer, registration and hour in it was created by a real user. The client keeps only an in-memory cache of what the signed-in person is allowed to see (`src/store`); Auth sessions and the active-organization preference persist in browser storage; business records do not. An old prototype key in `localStorage` is removed on load. Organizations create data (organizations, opportunities, posts, approvals, attendance, verified hours); volunteers create data (profile, follows, saves, registrations, manual hours); each sees the other's through the database's access rules.
 
 Not built yet: organization membership screens (join requests, invites, roles; ownership transfer exists only inside the delete-account flow), `join_policy` choice (new organizations default to `approval`), post images, and an admin screen for organization verification.
 
@@ -34,7 +34,7 @@ Not built yet: organization membership screens (join requests, invites, roles; o
 
 1. In Supabase, create a project and copy its Project URL and browser-safe **publishable** key.
 2. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Never put a secret or `service_role` key in any `VITE_` variable. `.env` and `.env.local` are ignored by Git.
-3. Confirm with the backend owner that every migration in `supabase/migrations/` is applied (including `20261107173000_organization_ownership.sql` and `20261107210000_ownership_transfer.sql`, needed to transfer ownership) **and that the `delete-account` function is deployed from this repo's current `supabase/functions/delete-account/index.ts`** (the repo version adds a CORS header the browser needs and refuses to delete shared organizations). The client never creates a missing `users` row; a missing row shows an error screen.
+3. Confirm with the backend owner that every migration in `supabase/migrations/` is applied (through `20261107211000_selected_account_deletion.sql`) **and that the `delete-account` function is deployed from this repo's current `supabase/functions/delete-account/index.ts`** (the deployed handler supports main's explicit per-organization choices and protects active organization media). The client never creates a missing `users` row; a missing row shows an error screen.
 4. In **Authentication → URL Configuration**, set the Site URL to your local origin (for example `http://localhost:5173` or `http://127.0.0.1:5173`) and allow `<origin>/**` as a redirect URL (this also covers `/reset-password`). Add the production HTTPS origin before deploying.
 5. In **Authentication → Sign In / Providers**, enable Email. Email confirmation can be on or off:
    - **On (recommended):** signup shows a "check your email" screen; the link signs the user in and continues to profile setup.
@@ -119,8 +119,12 @@ docs/AUTH_MEDIA_INTEGRATION.md   Auth/Media integration contract and status
 - Signup metadata is input for the backend trigger, not a trusted source of authorization. Signup never sends an account type.
 - A React route guard controls page display only; the database (RLS and RPCs) is the real boundary.
 - Storage upload and row update are separate operations. If the row write fails after the file was replaced, the client reports failure rather than claiming success.
-- Account deletion goes through the `delete-account` Edge Function with the user's own session. The function re-verifies the token, refuses to delete an organization that has other active members, and requires an explicit `deleteOwnedOrganizations` flag before deleting any owned organization.
+- Account deletion goes through the `delete-account` Edge Function with the user's own session. The function re-verifies the token, requires an explicit `deleteOrganizationIds` list for owned organizations. An organization with another active owner is kept; a sole owner can transfer it or explicitly select it for deletion, including its shared data. The older boolean request remains supported with its stricter shared-member restriction.
 
 ## Design tokens
 
 Defined in `src/index.css` (`@theme`): navy `#142C5B`, secondary blue `#244B85`, accent yellow `#F5C542`, light yellow `#FFF7DC`, background `#F7F8FA`, text `#202938` / `#687385`, borders `#E5E8ED`. Photos load from Unsplash with a graceful fallback.
+
+## Stabilization merge
+
+Main retains its existing pages, routes, organization switcher and per-organization account-deletion decisions. Compatible database/Storage hardening, secure public configuration, background jobs, type generation and CI are merged from `fix/main-stabilization`. The alternate connected screen modules under `src/application` remain available for future integration; they do not replace main routes. [Deployment status and validation](docs/STABILIZATION.md), [environment setup](docs/DEPLOYMENT.md), [Auth & Media integration](docs/AUTH_MEDIA_INTEGRATION.md).

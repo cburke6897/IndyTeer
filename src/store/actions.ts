@@ -15,7 +15,7 @@ import {
 import {
   createOpportunity as apiCreateOpp, deleteOpportunity as apiDeleteOpp, publishOpportunity, updateOpportunity as apiUpdateOpp,
 } from '../lib/api/opportunities'
-import { getPublicImageUrl, uploadOpportunityImage, uploadOrganizationImage } from '../lib/api/storage'
+import { uploadOpportunityImage, uploadOrganizationImage } from '../lib/api/storage'
 import { resetDB, getDB, setDB } from './store'
 import { refresh } from './sync'
 import { getOpp, isPast, registrationClosed, spotsLeft } from './selectors'
@@ -169,9 +169,9 @@ export async function updateOrgProfile(id: string, input: OrgProfileInput) {
 
 /** Uploads a logo or cover to Storage (saved on the organization) and returns its public URL. */
 export async function uploadOrgImage(orgId: string, kind: 'logo' | 'cover', file: File): Promise<string> {
-  const path = await uploadOrganizationImage(orgId, file, kind)
+  const image = await uploadOrganizationImage(orgId, file, kind)
   await refresh()
-  return getPublicImageUrl(kind === 'logo' ? 'org-logos' : 'org-covers', path)
+  return image.url
 }
 
 export type OpportunityInput = Omit<Opportunity, 'id' | 'orgId' | 'createdAt'>

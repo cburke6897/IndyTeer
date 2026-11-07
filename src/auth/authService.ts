@@ -13,11 +13,16 @@ export async function signUpWithEmail(
   extraMetadata: Record<string, string> = {},
 ) {
   if (!displayName.trim()) throw new Error('Enter your full name.')
+  const safeMetadata = Object.fromEntries(
+    Object.entries(extraMetadata).filter(([key]) =>
+      ['first_name', 'last_name', 'terms_accepted_at', 'avatar_url'].includes(key),
+    ),
+  )
   const { data, error } = await supabase.auth.signUp({
     email: email.trim(),
     password,
     options: {
-      data: { ...extraMetadata, full_name: displayName.trim() },
+      data: { ...safeMetadata, full_name: displayName.trim() },
       emailRedirectTo: window.location.origin,
     },
   })
