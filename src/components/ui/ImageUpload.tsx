@@ -10,19 +10,29 @@ interface Props {
   shape?: 'circle' | 'square' | 'wide'
   hint?: string
   placeholder?: ReactNode
+  /** When provided, the chosen file is uploaded (e.g. to Supabase Storage) and the returned URL is used as the value. */
+  upload?: (file: File) => Promise<string>
 }
 
-export function ImageUpload({ value, onChange, label, shape = 'square', hint, placeholder }: Props) {
+export function ImageUpload({ value, onChange, label, shape = 'square', hint, placeholder, upload }: Props) {
   const input = useRef<HTMLInputElement>(null)
   const [error, setError] = useState('')
+  const [uploading, setUploading] = useState(false)
 
   async function pick(file?: File) {
     if (!file) return
     setError('')
     try {
-      onChange(await readImage(file, shape === 'wide' ? 1400 : 500))
+      if (upload) {
+        setUploading(true)
+        onChange(await upload(file))
+      } else {
+        onChange(await readImage(file, shape === 'wide' ? 1400 : 500))
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -33,6 +43,7 @@ export function ImageUpload({ value, onChange, label, shape = 'square', hint, pl
       <div className={cn('flex gap-4', shape === 'wide' ? 'flex-col' : 'items-center')}>
         <button
           type="button"
+          disabled={uploading}
           onClick={() => input.current?.click()}
           aria-label={`${value ? 'Change' : 'Upload'} ${label.toLowerCase()}`}
           className={cn('group relative flex shrink-0 items-center justify-center overflow-hidden border border-dashed border-line-strong bg-surface text-muted transition-colors hover:border-navy-700 hover:bg-navy-50', frame)}
@@ -42,8 +53,8 @@ export function ImageUpload({ value, onChange, label, shape = 'square', hint, pl
         </button>
         <div>
           <div className="flex gap-2">
-            <Button size="sm" variant="secondary" icon={<Upload size={14} />} onClick={() => input.current?.click()}>{value ? 'Replace' : 'Upload'}</Button>
-            {value && <Button size="sm" variant="ghost" icon={<Trash2 size={14} />} onClick={() => onChange(null)}>Remove</Button>}
+            <Button size="sm" variant="secondary" icon={<Upload size={14} />} disabled={uploading} onClick={() => input.current?.click()}>{uploading ? 'Uploading…' : value ? 'Replace' : 'Upload'}</Button>
+            {value && <Button size="sm" variant="ghost" icon={<Trash2 size={14} />} disabled={uploading} onClick={() => onChange(null)}>Remove</Button>}
           </div>
           <p className="mt-2 text-xs text-muted">{hint ?? 'JPG or PNG. Previewed locally in your browser.'}</p>
           {error && <p role="alert" className="mt-1 text-xs font-medium text-danger">{error}</p>}

@@ -7,11 +7,13 @@ import { AVAILABILITY_OPTIONS, CATEGORIES, INDIANA_CITIES, ORG_TYPES, SKILLS } f
 import { isEmail, normalizeUrl } from '../../lib/utils'
 import { updateOrgProfile, updateVolunteerProfile } from '../../store/actions'
 import { toast } from '../../store/toast'
+import { useAvatarUpload } from '../../media/useAvatarUpload'
 import type { OrgProfile, VolunteerProfile } from '../../types'
 
 const phoneOk = (p: string) => !p || /^[\d\s().+-]{7,}$/.test(p)
 
 export function VolunteerProfileForm({ volunteer, onDone, onCancel, id }: { volunteer: VolunteerProfile; onDone?: () => void; onCancel?: () => void; id?: string }) {
+  const uploadAvatar = useAvatarUpload()
   const [f, setF] = useState({
     firstName: volunteer.firstName, lastName: volunteer.lastName, headline: volunteer.headline, avatar: volunteer.avatar, city: volunteer.city,
     bio: volunteer.bio, interests: volunteer.interests, skills: volunteer.skills, phone: volunteer.phone, availability: volunteer.availability,
@@ -37,7 +39,7 @@ export function VolunteerProfileForm({ volunteer, onDone, onCancel, id }: { volu
 
   return (
     <form id={id} onSubmit={submit} noValidate className="space-y-5">
-      <ImageUpload label="Profile picture" shape="circle" value={f.avatar} onChange={(v) => set('avatar', v)} />
+      <ImageUpload label="Profile picture" shape="circle" upload={uploadAvatar} value={f.avatar} onChange={(v) => set('avatar', v)} />
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput label="First name" value={f.firstName} onChange={(e) => set('firstName', e.target.value)} error={err.firstName} />
         <TextInput label="Last name" value={f.lastName} onChange={(e) => set('lastName', e.target.value)} error={err.lastName} />

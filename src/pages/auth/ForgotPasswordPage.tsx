@@ -4,18 +4,28 @@ import { ArrowLeft, MailCheck } from 'lucide-react'
 import { AuthLayout } from '../../components/layout/AuthLayout'
 import { TextInput } from '../../components/ui/Field'
 import { Button } from '../../components/ui/Button'
+import { requestPasswordReset } from '../../auth/accountService'
 import { isEmail } from '../../lib/utils'
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('')
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
   const [sent, setSent] = useState(false)
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault()
     if (!isEmail(email.trim())) return setError('Enter a valid email address.')
     setError('')
-    setSent(true)
+    setBusy(true)
+    try {
+      await requestPasswordReset(email)
+      setSent(true)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not send the reset email. Try again.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -28,12 +38,12 @@ export default function ForgotPasswordPage() {
         <div className="rounded-lg border border-green-200 bg-success-50 p-5">
           <MailCheck className="text-success" size={22} />
           <p className="mt-2 text-sm font-semibold text-ink">Check your inbox</p>
-          <p className="mt-1 text-sm text-muted">If an account exists for <strong>{email}</strong>, you’ll receive a reset link shortly. (Prototype: no email is actually sent.)</p>
+          <p className="mt-1 text-sm text-muted">If an account exists for <strong>{email}</strong>, you’ll receive a reset link shortly.</p>
         </div>
       ) : (
         <form onSubmit={submit} noValidate className="space-y-4">
           <TextInput label="Email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} error={error} />
-          <Button type="submit" size="lg" className="w-full">Send reset link</Button>
+          <Button type="submit" size="lg" className="w-full" disabled={busy}>{busy ? 'Sending…' : 'Send reset link'}</Button>
         </form>
       )}
     </AuthLayout>

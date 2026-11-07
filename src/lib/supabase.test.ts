@@ -1,0 +1,33 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const { createClientMock } = vi.hoisted(() => ({
+  createClientMock: vi.fn(() => ({ auth: {} })),
+}))
+
+vi.mock('@supabase/supabase-js', () => ({ createClient: createClientMock }))
+
+describe('Supabase browser client configuration', () => {
+  beforeEach(() => {
+    vi.resetModules()
+    createClientMock.mockClear()
+    vi.stubEnv('VITE_SUPABASE_URL', 'https://project-ref.supabase.co')
+    vi.stubEnv('VITE_SUPABASE_PUBLISHABLE_KEY', 'sb_publishable_test')
+  })
+
+  it('persists sessions and refreshes access tokens in the browser', async () => {
+    await import('./supabase')
+
+    expect(createClientMock).toHaveBeenCalledWith(
+      'https://project-ref.supabase.co',
+      'sb_publishable_test',
+      {
+        auth: {
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          flowType: 'pkce',
+          persistSession: true,
+        },
+      },
+    )
+  })
+})

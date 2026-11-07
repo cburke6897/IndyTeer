@@ -11,8 +11,8 @@ import { SearchInput } from '../ui/SearchInput'
 import { LinkButton } from '../ui/Button'
 import { cn, timeAgo } from '../../lib/utils'
 import { useSession } from '../../store/session'
-import { logout, markNotificationRead, markNotificationsRead } from '../../store/actions'
-import { toast } from '../../store/toast'
+import { markNotificationRead, markNotificationsRead } from '../../store/actions'
+import { useLogout } from '../../auth/useLogout'
 import type { AccountType } from '../../types'
 
 interface NavItem { to: string; label: string; icon: ReactNode; end?: boolean }
@@ -191,6 +191,7 @@ function NotificationsMenu() {
 function UserMenu({ role }: { role: AccountType }) {
   const { volunteer, org, user } = useSession()
   const navigate = useNavigate()
+  const logout = useLogout()
   const base = role === 'volunteer' ? '/app' : '/org'
   const name = role === 'volunteer' ? `${volunteer?.firstName ?? ''} ${volunteer?.lastName ?? ''}` : org?.name ?? ''
   return (
@@ -216,7 +217,7 @@ function UserMenu({ role }: { role: AccountType }) {
             <MenuItem icon={<Settings size={16} />} onClick={() => { close(); navigate(`${base}/settings`) }}>Settings</MenuItem>
           </div>
           <div className="border-t border-line pt-1">
-            <MenuItem icon={<LogOut size={16} />} onClick={() => { close(); logout(); navigate('/login'); toast('You’ve been logged out.', 'info') }}>Log out</MenuItem>
+            <MenuItem icon={<LogOut size={16} />} onClick={() => { close(); void logout() }}>Log out</MenuItem>
           </div>
         </>
       )}

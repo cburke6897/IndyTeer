@@ -11,12 +11,14 @@ import { AVAILABILITY_OPTIONS, CATEGORIES, INDIANA_CITIES, SKILLS } from '../../
 import { completeVolunteerOnboarding } from '../../store/actions'
 import { useSession } from '../../store/session'
 import { toast } from '../../store/toast'
+import { useAvatarUpload } from '../../media/useAvatarUpload'
 
 const STEPS = ['About you', 'Interests & skills', 'Availability']
 
 export default function VolunteerOnboardingPage() {
   const { user } = useSession()
   const navigate = useNavigate()
+  const uploadAvatar = useAvatarUpload()
   const [step, setStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [f, setF] = useState({
@@ -60,7 +62,7 @@ export default function VolunteerOnboardingPage() {
       <Card className="p-6 sm:p-8">
         {step === 0 && (
           <div className="space-y-5">
-            <ImageUpload label="Profile picture" shape="circle" value={f.avatar} onChange={(v) => set('avatar', v)} placeholder={<Camera size={26} />} hint="Optional. A friendly photo helps organizations recognize you." />
+            <ImageUpload label="Profile picture" shape="circle" upload={uploadAvatar} value={f.avatar} onChange={(v) => set('avatar', v)} placeholder={<Camera size={26} />} hint="Optional. A friendly photo helps organizations recognize you." />
             <div className="grid gap-4 sm:grid-cols-2">
               <TextInput label="First name" value={f.firstName} onChange={(e) => set('firstName', e.target.value)} error={errors.firstName} />
               <TextInput label="Last name" value={f.lastName} onChange={(e) => set('lastName', e.target.value)} error={errors.lastName} />

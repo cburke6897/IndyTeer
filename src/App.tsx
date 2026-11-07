@@ -3,11 +3,14 @@ import { useEffect } from 'react'
 import { AppShell } from './components/layout/AppShell'
 import { PublicOnly, RequireOnboarding, RequireRole } from './components/layout/RouteGuards'
 import { Toaster } from './components/ui/Toaster'
+import { AuthProvider } from './auth/AuthProvider'
+import { SessionBridge } from './auth/SessionBridge'
 import { LinkButton } from './components/ui/Button'
 import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/auth/LoginPage'
 import SignupPage from './pages/auth/SignupPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import AccountTypePage from './pages/onboarding/AccountTypePage'
 import VolunteerOnboardingPage from './pages/onboarding/VolunteerOnboardingPage'
 import OrgOnboardingPage from './pages/onboarding/OrgOnboardingPage'
@@ -47,6 +50,8 @@ function NotFound() {
 export default function App() {
   return (
     <BrowserRouter>
+      <AuthProvider>
+      <SessionBridge />
       <ScrollToTop />
       <Routes>
         <Route element={<PublicOnly />}>
@@ -55,6 +60,9 @@ export default function App() {
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         </Route>
+
+        {/* Recovery links sign the user in first, so this route must not bounce signed-in users. */}
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         <Route element={<RequireOnboarding />}>
           <Route path="/onboarding/account-type" element={<AccountTypePage />} />
@@ -96,6 +104,7 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster />
+      </AuthProvider>
     </BrowserRouter>
   )
 }

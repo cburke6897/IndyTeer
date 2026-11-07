@@ -1,7 +1,7 @@
 import type {
   AccountType, AppNotification, DB, Opportunity, OrgProfile, Registration, RegStatus, Settings, User, VolunteerProfile,
 } from '../types'
-import { DEMO_ORG_EMAIL, DEMO_PASSWORD, DEMO_VOLUNTEER_EMAIL, defaultSettings } from '../data/seed'
+import { defaultSettings } from '../data/seed'
 import { ORG_COLORS } from '../lib/constants'
 import { nowISO, todayISO, uid } from '../lib/utils'
 import { getDB, resetDB, setDB } from './store'
@@ -20,35 +20,66 @@ function notify(db: DB, userId: string | null | undefined, text: string, link: s
 const volunteerName = (v?: VolunteerProfile) => (v ? `${v.firstName} ${v.lastName}` : 'A volunteer')
 
 /* ------------------------------------ Auth ----------------------------------- */
-export function login(email: string, password: string): Result<{ user: User }> {
-  const db = getDB()
-  const user = db.users.find((u) => u.email.toLowerCase() === email.trim().toLowerCase())
-  if (!user) return { ok: false, error: 'We couldn’t find an account with that email. Check the spelling or create an account.' }
-  // Prototype only: demo accounts use a fixed password; accounts created here accept any password.
-  if (user.demo && password !== DEMO_PASSWORD) return { ok: false, error: 'That password doesn’t match. Try the demo password shown below.' }
-  setDB((d) => ({ ...d, sessionUserId: user.id }))
-  return { ok: true, user }
+// Authentication itself (signup, login, logout, password reset) is handled by Supabase Auth
+// (see src/auth). The local store only mirrors the signed-in user so the rest of the
+// prototype data can be keyed to the real Supabase user id.
+
+export interface AuthUserLike {
+  id: string
+  email?: string | null
+  user_metadata?: Record<string, unknown> | null
 }
 
-export function loginDemo(type: AccountType) {
-  return login(type === 'volunteer' ? DEMO_VOLUNTEER_EMAIL : DEMO_ORG_EMAIL, DEMO_PASSWORD)
-}
-
-export function signup(input: { firstName: string; lastName: string; email: string }): Result<{ user: User }> {
-  const db = getDB()
-  if (db.users.some((u) => u.email.toLowerCase() === input.email.trim().toLowerCase())) {
-    return { ok: false, error: 'An account with that email already exists. Try logging in instead.' }
+function namesFromMetadata(meta: Record<string, unknown>, email: string) {
+  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+  let first = str(meta.first_name)
+  let last = str(meta.last_name)
+  if (!first && !last) {
+    const parts = (str(meta.display_name) || str(meta.full_name) || email.split('@')[0]).split(/\s+/)
+    first = parts[0] ?? ''
+    last = parts.slice(1).join(' ')
   }
-  const user: User = {
-    id: uid('u'), email: input.email.trim(), firstName: input.firstName.trim(), lastName: input.lastName.trim(),
-    accountType: null, onboarded: false, profileId: null, createdAt: nowISO(),
-  }
-  setDB((d) => ({ ...d, users: [...d.users, user], settings: { ...d.settings, [user.id]: defaultSettings() }, sessionUserId: user.id }))
-  return { ok: true, user }
+  return { first, last }
 }
 
-export function logout() {
-  setDB((d) => ({ ...d, sessionUserId: null }))
+/** Mirrors the Supabase Auth user into the local store (idempotent; no-op when nothing changed). */
+export function syncAuthUser(authUser: AuthUserLike | null) {
+  const db = getDB()
+  if (!authUser) {
+    if (db.sessionUserId !== null) setDB((d) => ({ ...d, sessionUserId: null }))
+    return
+  }
+  const meta = authUser.user_metadata ?? {}
+  const email = authUser.email ?? ''
+  const metaType = meta.account_type === 'volunteer' || meta.account_type === 'organization' ? meta.account_type : null
+  const existing = db.users.find((u) => u.id === authUser.id)
+
+  if (!existing) {
+    const { first, last } = namesFromMetadata(meta, email)
+    const user: User = {
+      id: authUser.id, email, firstName: first, lastName: last, accountType: metaType,
+      onboarded: false, profileId: null, createdAt: nowISO(),
+    }
+    setDB((d) => ({
+      ...d,
+      users: [...d.users, user],
+      settings: { ...d.settings, [user.id]: defaultSettings() },
+      sessionUserId: user.id,
+    }))
+    return
+  }
+
+  const typeChanged = !!metaType && existing.accountType !== metaType && !existing.onboarded
+  const emailChanged = !!email && existing.email !== email
+  if (typeChanged || emailChanged || db.sessionUserId !== existing.id) {
+    setDB((d) => ({
+      ...d,
+      users: d.users.map((u) => (u.id === existing.id
+        ? { ...u, email: emailChanged ? email : u.email, accountType: typeChanged ? metaType : u.accountType }
+        : u)),
+      sessionUserId: existing.id,
+    }))
+  }
 }
 
 export function chooseAccountType(userId: string, type: AccountType) {

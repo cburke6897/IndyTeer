@@ -1,18 +1,18 @@
 import type { ReactNode } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { Check } from 'lucide-react'
 import { Logo } from '../../components/ui/Logo'
 import { cn } from '../../lib/utils'
-import { logout } from '../../store/actions'
+import { useLogout } from '../../auth/useLogout'
 
 export function OnboardingLayout({ children, width = 'max-w-2xl' }: { children: ReactNode; width?: string }) {
-  const navigate = useNavigate()
+  const logout = useLogout()
   return (
     <div className="min-h-screen bg-surface">
       <header className="border-b border-line bg-white">
         <div className="mx-auto flex h-16 max-w-5xl items-center justify-between px-5">
           <Link to="/"><Logo /></Link>
-          <button onClick={() => { logout(); navigate('/login') }} className="text-sm font-semibold text-muted hover:text-navy">Log out</button>
+          <button onClick={() => void logout()} className="text-sm font-semibold text-muted hover:text-navy">Log out</button>
         </div>
       </header>
       <main className={cn('mx-auto px-5 py-8 sm:py-12', width)}>{children}</main>

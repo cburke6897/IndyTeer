@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Bell, Lock, LogOut, RotateCcw, ShieldCheck, Trash2, User, UserCog } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Card, CardHeader } from '../../components/ui/Card'
@@ -14,7 +13,10 @@ import { OrgProfileForm, VolunteerProfileForm } from '../../components/domain/Pr
 import { cn, isEmail } from '../../lib/utils'
 import { useSession } from '../../store/session'
 import { defaultSettings } from '../../data/seed'
-import { deleteAccount, logout, resetDemoData, updateOrgProfile, updateSettings, updateUser, updateVolunteerProfile } from '../../store/actions'
+import { deleteAccount, resetDemoData, updateOrgProfile, updateSettings, updateUser, updateVolunteerProfile } from '../../store/actions'
+import { updateEmail, updatePassword, verifyPassword } from '../../auth/accountService'
+import { useLogout } from '../../auth/useLogout'
+import { useAvatarUpload } from '../../media/useAvatarUpload'
 import { toast } from '../../store/toast'
 import type { Settings } from '../../types'
 
@@ -52,8 +54,10 @@ export default function SettingsPage() {
 }
 
 function AccountSection() {
-  const { db, user, volunteer, org } = useSession()
-  const navigate = useNavigate()
+  const { user, volunteer, org } = useSession()
+  const logout = useLogout()
+  const uploadAvatar = useAvatarUpload()
+  const [saving, setSaving] = useState(false)
   const [f, setF] = useState({ firstName: user!.firstName, lastName: user!.lastName, email: user!.email })
   const [err, setErr] = useState<Record<string, string>>({})
   const [pw, setPw] = useState({ current: '', next: '', confirm: '' })
@@ -62,21 +66,29 @@ function AccountSection() {
   const [reset, setReset] = useState(false)
   const [typed, setTyped] = useState('')
 
-  function saveAccount(e: React.FormEvent) {
+  async function saveAccount(e: React.FormEvent) {
     e.preventDefault()
     const x: Record<string, string> = {}
     if (!f.firstName.trim()) x.firstName = 'Required'
     if (!f.lastName.trim()) x.lastName = 'Required'
     if (!isEmail(f.email.trim())) x.email = 'Enter a valid email.'
-    else if (db.users.some((u) => u.id !== user!.id && u.email.toLowerCase() === f.email.trim().toLowerCase())) x.email = 'That email is already in use.'
     setErr(x)
     if (Object.keys(x).length) return
-    updateUser(user!.id, { firstName: f.firstName.trim(), lastName: f.lastName.trim(), email: f.email.trim() })
-    if (volunteer) updateVolunteerProfile(volunteer.id, { firstName: f.firstName.trim(), lastName: f.lastName.trim() })
-    toast('Account details saved.')
+    setSaving(true)
+    try {
+      const emailChanged = f.email.trim().toLowerCase() !== user!.email.toLowerCase()
+      if (emailChanged) await updateEmail(f.email)
+      updateUser(user!.id, { firstName: f.firstName.trim(), lastName: f.lastName.trim() })
+      if (volunteer) updateVolunteerProfile(volunteer.id, { firstName: f.firstName.trim(), lastName: f.lastName.trim() })
+      toast(emailChanged ? 'Saved. Confirm your new email address using the link we sent.' : 'Account details saved.')
+    } catch (cause) {
+      setErr({ email: cause instanceof Error ? cause.message : 'Could not save your account details.' })
+    } finally {
+      setSaving(false)
+    }
   }
 
-  function savePassword(e: React.FormEvent) {
+  async function savePassword(e: React.FormEvent) {
     e.preventDefault()
     const x: Record<string, string> = {}
     if (!pw.current) x.current = 'Enter your current password.'
@@ -84,8 +96,15 @@ function AccountSection() {
     if (pw.confirm !== pw.next) x.confirm = 'Passwords don’t match.'
     setPwErr(x)
     if (Object.keys(x).length) return
-    setPw({ current: '', next: '', confirm: '' })
-    toast('Password updated. (Prototype: nothing is stored.)')
+    try {
+      await verifyPassword(user!.email, pw.current)
+      await updatePassword(pw.next)
+      setPw({ current: '', next: '', confirm: '' })
+      toast('Password updated.')
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Could not update your password.'
+      setPwErr(/current password/i.test(message) ? { current: message } : { next: message })
+    }
   }
 
   return (
@@ -93,19 +112,19 @@ function AccountSection() {
       <Card>
         <CardHeader title="Account" subtitle="Your sign-in details" action={<Badge tone="gold">{user!.accountType === 'volunteer' ? 'Volunteer account' : 'Organization account'}</Badge>} />
         <form onSubmit={saveAccount} noValidate className="space-y-5 p-5">
-          {volunteer && <ImageUpload label="Profile picture" shape="circle" value={volunteer.avatar} onChange={(v) => updateVolunteerProfile(volunteer.id, { avatar: v })} />}
+          {volunteer && <ImageUpload label="Profile picture" shape="circle" upload={uploadAvatar} value={volunteer.avatar} onChange={(v) => updateVolunteerProfile(volunteer.id, { avatar: v })} />}
           {org && <ImageUpload label="Organization logo" value={org.logo} onChange={(v) => updateOrgProfile(org.id, { logo: v })} />}
           <div className="grid gap-4 sm:grid-cols-2">
             <TextInput label={org ? 'Admin first name' : 'First name'} value={f.firstName} onChange={(e) => setF({ ...f, firstName: e.target.value })} error={err.firstName} />
             <TextInput label={org ? 'Admin last name' : 'Last name'} value={f.lastName} onChange={(e) => setF({ ...f, lastName: e.target.value })} error={err.lastName} />
           </div>
           <TextInput label="Email" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} error={err.email} />
-          <div className="flex justify-end"><Button type="submit">Save account</Button></div>
+          <div className="flex justify-end"><Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save account'}</Button></div>
         </form>
       </Card>
 
       <Card>
-        <CardHeader title="Change password" subtitle="Visual prototype only" />
+        <CardHeader title="Change password" subtitle="Confirms your current password first" />
         <form onSubmit={savePassword} noValidate className="space-y-4 p-5">
           <PasswordInput label="Current password" autoComplete="current-password" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} error={pwErr.current} />
           <div className="grid gap-4 sm:grid-cols-2">
@@ -121,7 +140,7 @@ function AccountSection() {
         <div className="divide-y divide-line">
           <div className="flex flex-wrap items-center justify-between gap-3 p-5">
             <div><p className="text-sm font-semibold text-ink">Log out</p><p className="text-[13px] text-muted">End this session on this device.</p></div>
-            <Button variant="secondary" icon={<LogOut size={16} />} onClick={() => { logout(); navigate('/login'); toast('You’ve been logged out.', 'info') }}>Log out</Button>
+            <Button variant="secondary" icon={<LogOut size={16} />} onClick={() => void logout()}>Log out</Button>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 p-5">
             <div><p className="text-sm font-semibold text-ink">Reset demo data</p><p className="text-[13px] text-muted">Restore the original sample data and sign out. Handy before a demo.</p></div>
@@ -134,13 +153,13 @@ function AccountSection() {
         </div>
       </Card>
 
-      <ConfirmDialog open={reset} onClose={() => setReset(false)} destructive title="Reset all demo data?" message="Everything you created in this browser (accounts, opportunities, registrations) will be replaced with the original sample data." confirmLabel="Reset demo data" onConfirm={() => { resetDemoData(); navigate('/login'); toast('Demo data reset.', 'info') }} />
+      <ConfirmDialog open={reset} onClose={() => setReset(false)} destructive title="Reset all demo data?" message="Everything you created in this browser (accounts, opportunities, registrations) will be replaced with the original sample data." confirmLabel="Reset demo data" onConfirm={() => { resetDemoData(); void logout('Demo data reset. Log in to start fresh.') }} />
       <Modal
         open={del}
         onClose={() => setDel(false)}
         size="sm"
         title="Delete your account?"
-        footer={<><Button variant="secondary" onClick={() => setDel(false)}>Cancel</Button><Button variant="danger" disabled={typed !== 'DELETE'} onClick={() => { deleteAccount(user!.id); navigate('/login'); toast('Your account was deleted.', 'info') }}>Delete my account</Button></>}
+        footer={<><Button variant="secondary" onClick={() => setDel(false)}>Cancel</Button><Button variant="danger" disabled={typed !== 'DELETE'} onClick={() => { deleteAccount(user!.id); void logout('Your profile and data were deleted and you were signed out.') }}>Delete my account</Button></>}
       >
         <p className="mb-4 text-sm text-ink/90">
           {org ? 'Your organization profile, opportunities, and registrations will be permanently removed.' : 'Your profile, registrations, and volunteer hours will be permanently removed.'} This can’t be undone.

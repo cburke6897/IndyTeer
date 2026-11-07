@@ -5,6 +5,8 @@ import { OnboardingLayout } from './OnboardingLayout'
 import { Button } from '../../components/ui/Button'
 import { cn } from '../../lib/utils'
 import { chooseAccountType } from '../../store/actions'
+import { saveAccountType } from '../../auth/accountService'
+import { toast } from '../../store/toast'
 import { useSession } from '../../store/session'
 import type { AccountType } from '../../types'
 
@@ -26,10 +28,20 @@ export default function AccountTypePage() {
   const navigate = useNavigate()
   const [choice, setChoice] = useState<AccountType | null>(user?.accountType ?? null)
 
-  function next() {
+  const [busy, setBusy] = useState(false)
+
+  async function next() {
     if (!choice || !user) return
-    chooseAccountType(user.id, choice)
-    navigate(`/onboarding/${choice}`)
+    setBusy(true)
+    try {
+      await saveAccountType(choice)
+      chooseAccountType(user.id, choice)
+      navigate(`/onboarding/${choice}`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save your choice. Try again.', 'error')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -68,7 +80,7 @@ export default function AccountTypePage() {
         })}
       </div>
       <div className="mt-8 flex justify-end">
-        <Button size="lg" disabled={!choice} onClick={next} icon={undefined}>
+        <Button size="lg" disabled={!choice || busy} onClick={next}>
           Continue <ArrowRight size={17} />
         </Button>
       </div>

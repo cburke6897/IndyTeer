@@ -1,39 +1,62 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { AlertCircle, Building2, HeartHandshake } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { AlertCircle, MailWarning } from 'lucide-react'
 import { AuthLayout } from '../../components/layout/AuthLayout'
 import { TextInput } from '../../components/ui/Field'
 import { PasswordInput } from '../../components/ui/PasswordInput'
 import { Button } from '../../components/ui/Button'
-import { login, loginDemo } from '../../store/actions'
-import { homePathFor } from '../../store/selectors'
-import { DEMO_ORG_EMAIL, DEMO_PASSWORD, DEMO_VOLUNTEER_EMAIL } from '../../data/seed'
+import { useAuth } from '../../auth/useAuth'
+import { resendConfirmation } from '../../auth/accountService'
+import { setRememberMe } from '../../auth/rememberMe'
+import { toast } from '../../store/toast'
 import { isEmail } from '../../lib/utils'
-import type { AccountType } from '../../types'
 
 export default function LoginPage() {
-  const navigate = useNavigate()
+  const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
+  const [busy, setBusy] = useState(false)
   const [errors, setErrors] = useState<{ email?: string; password?: string; form?: string }>({})
+  const [unconfirmed, setUnconfirmed] = useState(false)
 
-  function submit(e: FormEvent) {
+  async function submit(e: FormEvent) {
     e.preventDefault()
     const next: typeof errors = {}
     if (!email.trim()) next.email = 'Enter your email address.'
     else if (!isEmail(email.trim())) next.email = 'That doesn’t look like a valid email address.'
     if (!password) next.password = 'Enter your password.'
     setErrors(next)
+    setUnconfirmed(false)
     if (Object.keys(next).length) return
-    const res = login(email, password)
-    if (!res.ok) return setErrors({ form: res.error })
-    navigate(homePathFor(res.user), { replace: true })
+
+    setBusy(true)
+    try {
+      setRememberMe(remember)
+      await signIn(email, password)
+      // On success the shared session updates and the route guard redirects by account type.
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : 'Login failed. Please try again.'
+      if (/email not confirmed/i.test(message)) {
+        setUnconfirmed(true)
+        setErrors({ form: 'Confirm your email address before logging in. Check your inbox for the link.' })
+      } else if (/invalid login credentials/i.test(message)) {
+        setErrors({ form: 'That email and password don’t match. Check them and try again.' })
+      } else {
+        setErrors({ form: message })
+      }
+    } finally {
+      setBusy(false)
+    }
   }
 
-  function demo(type: AccountType) {
-    const res = loginDemo(type)
-    if (res.ok) navigate(homePathFor(res.user), { replace: true })
+  async function resend() {
+    try {
+      await resendConfirmation(email)
+      toast('Confirmation email sent.')
+    } catch (cause) {
+      toast(cause instanceof Error ? cause.message : 'Could not resend the email.', 'error')
+    }
   }
 
   return (
@@ -45,8 +68,11 @@ export default function LoginPage() {
       <form onSubmit={submit} noValidate className="space-y-4">
         {errors.form && (
           <div role="alert" className="flex gap-2.5 rounded-md border border-red-200 bg-danger-50 p-3 text-sm text-danger">
-            <AlertCircle size={17} className="mt-0.5 shrink-0" />
-            <span>{errors.form}</span>
+            {unconfirmed ? <MailWarning size={17} className="mt-0.5 shrink-0" /> : <AlertCircle size={17} className="mt-0.5 shrink-0" />}
+            <span>
+              {errors.form}
+              {unconfirmed && <> <button type="button" onClick={resend} className="font-semibold underline">Resend email</button></>}
+            </span>
           </div>
         )}
         <TextInput label="Email" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
@@ -58,31 +84,8 @@ export default function LoginPage() {
           </label>
           <Link to="/forgot-password" className="text-sm font-semibold text-navy-700 hover:underline">Forgot password?</Link>
         </div>
-        <Button type="submit" size="lg" className="w-full">Log in</Button>
+        <Button type="submit" size="lg" className="w-full" disabled={busy}>{busy ? 'Logging in…' : 'Log in'}</Button>
       </form>
-
-      <div className="mt-8 rounded-lg border border-gold-100 bg-gold-50/70 p-4">
-        <p className="text-[13px] font-bold text-navy">Explore the demo</p>
-        <p className="mt-0.5 text-xs text-muted">One click signs you in with seeded data. No backend required.</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <button onClick={() => demo('volunteer')} className="flex items-center gap-2.5 rounded-md border border-line-strong bg-white p-2.5 text-left transition-colors hover:border-navy-700">
-            <span className="flex size-8 items-center justify-center rounded bg-navy-50 text-navy-700"><HeartHandshake size={17} /></span>
-            <span><span className="block text-[13px] font-semibold text-navy">Volunteer</span><span className="block text-xs text-muted">Maya Thompson</span></span>
-          </button>
-          <button onClick={() => demo('organization')} className="flex items-center gap-2.5 rounded-md border border-line-strong bg-white p-2.5 text-left transition-colors hover:border-navy-700">
-            <span className="flex size-8 items-center justify-center rounded bg-navy-50 text-navy-700"><Building2 size={17} /></span>
-            <span><span className="block text-[13px] font-semibold text-navy">Organization</span><span className="block text-xs text-muted">Hoosier Harvest</span></span>
-          </button>
-        </div>
-        <button
-          className="mt-3 w-full text-left text-xs text-muted"
-          onClick={() => { setEmail(DEMO_VOLUNTEER_EMAIL); setPassword(DEMO_PASSWORD); setErrors({}) }}
-          title="Fill in the volunteer demo credentials"
-        >
-          <span className="font-semibold text-ink">Credentials:</span> {DEMO_VOLUNTEER_EMAIL} or {DEMO_ORG_EMAIL} · password <code className="rounded bg-white px-1 py-0.5 text-[11px]">{DEMO_PASSWORD}</code>
-          <span className="ml-1 font-semibold text-navy-700">Fill in</span>
-        </button>
-      </div>
     </AuthLayout>
   )
 }
