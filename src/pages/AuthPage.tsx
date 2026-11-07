@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
+import { AuthLayout } from '../components/layout/AuthLayout'
 
 type AuthPageProps = { mode: 'login' | 'signup' }
 
@@ -55,16 +56,12 @@ export function AuthPage({ mode }: AuthPageProps) {
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card" aria-labelledby="auth-title">
-        <Link className="brand" to="/" aria-label="IndyTeer home">IndyTeer</Link>
-        <p className="eyebrow">VolunteerConnect</p>
-        <h1 id="auth-title">{isSignup ? 'Join the community' : 'Welcome back'}</h1>
-        <p className="muted">
-          {isSignup
+    <AuthLayout
+      title={isSignup ? 'Join the community' : 'Welcome back'}
+      subtitle={isSignup
             ? 'Create an account to find volunteer opportunities around Indianapolis.'
             : 'Sign in to continue to your volunteer profile.'}
-        </p>
+    >
 
         <form className="auth-form" onSubmit={handleSubmit}>
           {isSignup && (
@@ -118,7 +115,6 @@ export function AuthPage({ mode }: AuthPageProps) {
             {isSignup ? 'Log in' : 'Create an account'}
           </Link>
         </p>
-      </section>
-    </main>
+    </AuthLayout>
   )
 }

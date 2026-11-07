@@ -1,6 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { AvatarUploader } from './AvatarUploader'
+import { Logo } from '../components/ui/Logo'
 
 export function ProfilePage() {
   const { user, signOut } = useAuth()
@@ -17,7 +18,7 @@ export function ProfilePage() {
   return (
     <main className="profile-shell">
       <header className="topbar">
-        <Link className="brand" to="/">IndyTeer</Link>
+        <Link className="brand" to="/" aria-label="IndyTeer home"><Logo /></Link>
         <button className="text-button" onClick={handleSignOut} type="button">Log out</button>
       </header>
       <section className="profile-card">
