@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import {
   BarChart3, Bell, Building2, CalendarCheck, Check, ChevronDown, ChevronsUpDown, Clock, Compass, HeartHandshake, LayoutDashboard,
@@ -15,6 +15,9 @@ import { markNotificationRead, markNotificationsRead, setActiveOrg } from '../..
 import { memberRole, sessionVolunteer } from '../../store/selectors'
 import { act } from '../../store/act'
 import { useLogout } from '../../auth/useLogout'
+import { db as supabase } from '../../lib/api/client'
+import { mapNotification } from '../../data/remote'
+import { setDB } from '../../store/store'
 
 type Area = 'user' | 'org'
 
@@ -224,6 +227,22 @@ function Topbar({ area, onMenu }: { area: Area; onMenu: () => void }) {
 function NotificationsMenu() {
   const { db, user } = useSession()
   const navigate = useNavigate()
+  useEffect(() => {
+    if (!user) return
+    const channel = supabase
+      .channel(`notifications:${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
+        if (payload.eventType === 'DELETE') return
+        const notification = mapNotification(payload.new as import('../../types/database').Tables<'notifications'>)
+        setDB((state) => ({
+          ...state,
+          notifications: [notification, ...state.notifications.filter((item) => item.id !== notification.id)]
+            .sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 50),
+        }))
+      })
+      .subscribe()
+    return () => { void supabase.removeChannel(channel) }
+  }, [user?.id])
   if (!user) return null
   const mine = db.notifications.filter((n) => n.userId === user.id).sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   const unread = mine.filter((n) => !n.read).length
