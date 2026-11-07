@@ -61,8 +61,8 @@ Deno.serve(async (request) => {
       return Response.json({ error: 'Your session could not be verified.' }, { status: 401, headers: corsHeaders })
     }
 
-    // Deleting owned organizations is destructive and affects other people, so the caller must ask
-    // for it explicitly. Without the flag, an account that owns an organization is not deleted.
+    // Transferred organizations are no longer owned by the caller. Any remaining owned
+    // organizations are deleted only after the caller explicitly chooses that outcome.
     const body = await request.json().catch(() => ({})) as { deleteOwnedOrganizations?: unknown }
     const confirmedOrganizationDeletion = body?.deleteOwnedOrganizations === true
 
@@ -83,10 +83,9 @@ Deno.serve(async (request) => {
         .map((row) => row.organization_id),
     ])]
 
-    // Safety checks run before anything is removed. organizations.created_by cascades from the user,
-    // and the ownership-transfer workflow does not exist yet, so deleting an account always deletes
-    // the organizations in `organizationsToDelete` for everyone. Refuse when that would take other
-    // active members' organization away, and when the caller did not confirm the deletion.
+    // Safety checks run before anything is removed. If the UI has transferred ownership first,
+    // the organization no longer appears here. Otherwise, explicit confirmation means deleting the
+    // whole organization, including its active members' shared data.
     if (organizationsToDelete.length) {
       const { data: organizations, error: organizationsError } = await admin
         .from('organizations').select('id,name').in('id', organizationsToDelete)
@@ -102,17 +101,10 @@ Deno.serve(async (request) => {
       const summary = (organizations ?? []).map((row) => ({
         id: row.id, name: row.name, otherActiveMembers: memberCounts.get(row.id) ?? 0,
       }))
-      if (summary.some((row) => row.otherActiveMembers > 0)) {
-        return Response.json({
-          code: 'ORGANIZATION_HAS_MEMBERS',
-          error: 'An organization you own has other active members. Ownership transfer is not available yet, so your account was not deleted.',
-          organizations: summary,
-        }, { status: 409, headers: corsHeaders })
-      }
       if (!confirmedOrganizationDeletion) {
         return Response.json({
           code: 'ORGANIZATION_DELETION_NOT_CONFIRMED',
-          error: 'Your account owns organizations that would be permanently deleted. Confirm that you want to delete them to continue.',
+          error: 'Choose a successor for each organization you want to keep, or confirm that the remaining organizations should be permanently deleted.',
           organizations: summary,
         }, { status: 409, headers: corsHeaders })
       }

@@ -1,4 +1,5 @@
 import { db } from './client'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Organization, OrganizationMembership, OrganizationRole, PublicOrganization } from '../../types/models'
 
 export type OrganizationFilters = { q?: string; city?: string; focus?: string }
@@ -105,6 +106,30 @@ export async function setOrganizationMemberRole(organizationId: string, userId: 
   })
   if (error) throw new Error(error.message)
   return data as OrganizationMembership
+}
+
+/** Transfer ownership to an active admin/member; the current owner becomes an admin. */
+export async function transferOrganizationOwnership(
+  organizationId: string,
+  newOwnerId: string,
+): Promise<OrganizationMembership> {
+  // The generated database types are refreshed once the ownership migration is deployed.
+  const rpc = (db as unknown as SupabaseClient).rpc
+  const { data, error } = await rpc('transfer_organization_ownership', {
+    p_organization_id: organizationId,
+    p_new_owner_id: newOwnerId,
+  })
+  if (error) throw new Error(error.message)
+  return data as OrganizationMembership
+}
+
+/** Delete an organization and its Storage assets. The Edge Function verifies active ownership. */
+export async function deleteOrganization(organizationId: string): Promise<void> {
+  const { error } = await db.functions.invoke('delete-organization', {
+    method: 'POST',
+    body: { organizationId },
+  })
+  if (error) throw new Error(error.message)
 }
 
 export async function setOrganizationVerified(organizationId: string, verified: boolean) {
