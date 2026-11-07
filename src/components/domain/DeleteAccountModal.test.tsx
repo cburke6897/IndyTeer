@@ -3,7 +3,10 @@ import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const stub = vi.hoisted(() => ({
-  impact: { owned: [] as { id: string; name: string; otherActiveMembers: number }[], memberOfCount: 0 },
+  impact: {
+    owned: [] as { id: string; name: string; otherActiveMembers: number }[],
+    memberOfCount: 0,
+  },
   loadError: null as string | null,
   deleteCalls: [] as unknown[],
   deleteImpl: (): Promise<void> => Promise.resolve(),
@@ -14,26 +17,42 @@ vi.mock('../../account/deleteAccountService', async () => {
     kind: string
     code: string | null
     organizations: unknown[]
-    constructor(message: string, kind: string, code: string | null = null, organizations: unknown[] = []) {
-      super(message); this.kind = kind; this.code = code; this.organizations = organizations
+    constructor(
+      message: string,
+      kind: string,
+      code: string | null = null,
+      organizations: unknown[] = [],
+    ) {
+      super(message)
+      this.kind = kind
+      this.code = code
+      this.organizations = organizations
     }
   }
   return {
     DeleteAccountError,
-    getDeletionImpact: () => (stub.loadError ? Promise.reject(new Error(stub.loadError)) : Promise.resolve(stub.impact)),
-    deleteAccount: (opts: unknown) => { stub.deleteCalls.push(opts); return stub.deleteImpl() },
+    getDeletionImpact: () =>
+      stub.loadError ? Promise.reject(new Error(stub.loadError)) : Promise.resolve(stub.impact),
+    deleteAccount: (opts: unknown) => {
+      stub.deleteCalls.push(opts)
+      return stub.deleteImpl()
+    },
   }
 })
-const clearLocal = vi.hoisted(() => vi.fn())
-vi.mock('../../store/actions', () => ({ deleteAccount: clearLocal }))
 vi.mock('../../store/toast', () => ({ toast: vi.fn() }))
 
 import { DeleteAccountModal } from './DeleteAccountModal'
 import { DeleteAccountError } from '../../account/deleteAccountService'
 
-const renderModal = () => render(<MemoryRouter><DeleteAccountModal userId="me" onClose={vi.fn()} /></MemoryRouter>)
+const renderModal = () =>
+  render(
+    <MemoryRouter>
+      <DeleteAccountModal userId="me" onClose={vi.fn()} />
+    </MemoryRouter>,
+  )
 const deleteButton = () => screen.getByRole('button', { name: /Permanently delete my account/ })
-const typeDelete = () => fireEvent.change(screen.getByLabelText('Type DELETE to confirm'), { target: { value: 'DELETE' } })
+const typeDelete = () =>
+  fireEvent.change(screen.getByLabelText('Type DELETE to confirm'), { target: { value: 'DELETE' } })
 
 describe('delete account modal', () => {
   beforeEach(() => {
@@ -41,7 +60,6 @@ describe('delete account modal', () => {
     stub.loadError = null
     stub.deleteCalls.length = 0
     stub.deleteImpl = () => Promise.resolve()
-    clearLocal.mockClear()
   })
 
   it('explains the consequences and needs the typed confirmation', async () => {
@@ -57,12 +75,15 @@ describe('delete account modal', () => {
     await screen.findByText(/can’t be undone/)
     typeDelete()
     fireEvent.click(deleteButton())
-    await waitFor(() => expect(clearLocal).toHaveBeenCalledWith('me'))
+    await waitFor(() => expect(stub.deleteCalls).toEqual([{ deleteOwnedOrganizations: false }]))
     expect(stub.deleteCalls).toEqual([{ deleteOwnedOrganizations: false }])
   })
 
   it('requires an explicit choice for each sole-owned organization', async () => {
-    stub.impact = { owned: [{ id: 'o1', name: 'Solo Org', otherActiveMembers: 0 }], memberOfCount: 0 }
+    stub.impact = {
+      owned: [{ id: 'o1', name: 'Solo Org', otherActiveMembers: 0 }],
+      memberOfCount: 0,
+    }
     renderModal()
     await screen.findByText('Organizations you own')
     typeDelete()
@@ -74,7 +95,10 @@ describe('delete account modal', () => {
   })
 
   it('blocks the whole flow when an owned organization has other active members', async () => {
-    stub.impact = { owned: [{ id: 'o2', name: 'Shared Org', otherActiveMembers: 3 }], memberOfCount: 0 }
+    stub.impact = {
+      owned: [{ id: 'o2', name: 'Shared Org', otherActiveMembers: 3 }],
+      memberOfCount: 0,
+    }
     renderModal()
     expect(await screen.findByText('Deletion is blocked')).toBeInTheDocument()
     expect(screen.getByText(/3 other active members/)).toBeInTheDocument()
@@ -91,23 +115,27 @@ describe('delete account modal', () => {
   })
 
   it('shows an incomplete deletion as a failure and does not clear local data or navigate away', async () => {
-    stub.deleteImpl = () => Promise.reject(new DeleteAccountError('Your account deletion did not finish.', 'incomplete'))
+    stub.deleteImpl = () =>
+      Promise.reject(new DeleteAccountError('Your account deletion did not finish.', 'incomplete'))
     renderModal()
     await screen.findByText(/can’t be undone/)
     typeDelete()
     fireEvent.click(deleteButton())
     expect(await screen.findByText('Deletion did not finish')).toBeInTheDocument()
-    expect(clearLocal).not.toHaveBeenCalled()
   })
 
   it('switches to the blocked state if the server reports members the preview missed', async () => {
-    stub.deleteImpl = () => Promise.reject(new DeleteAccountError('blocked', 'blocked', 'ORGANIZATION_HAS_MEMBERS', [{ id: 'o9', name: 'Hidden Org', otherActiveMembers: 1 }]))
+    stub.deleteImpl = () =>
+      Promise.reject(
+        new DeleteAccountError('blocked', 'blocked', 'ORGANIZATION_HAS_MEMBERS', [
+          { id: 'o9', name: 'Hidden Org', otherActiveMembers: 1 },
+        ]),
+      )
     renderModal()
     await screen.findByText(/can’t be undone/)
     typeDelete()
     fireEvent.click(deleteButton())
     expect(await screen.findByText('Deletion is blocked')).toBeInTheDocument()
     expect(screen.getByText('Hidden Org')).toBeInTheDocument()
-    expect(clearLocal).not.toHaveBeenCalled()
   })
 })

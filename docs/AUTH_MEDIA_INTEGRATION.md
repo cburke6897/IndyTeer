@@ -1,86 +1,49 @@
-# Auth and Media integration contract
+# Auth & Media integration — complete-app branch
 
-> **Superseded in part.** The `profiles` / `account_type` model described in the early sections below was replaced by the `public.users` + organization-membership schema (migrations `20261107165500` onward). Signup no longer sends `account_type`; see "Frontend integration status" at the end for the current contract.
+This branch implements frontend/backend independently, using the latest `users`/organizations handoff. It supersedes the former `profiles.account_type` design. Shared rollout is explicitly authorized; consult STABILIZATION.md for the verified result.
 
-## Ownership
+## Identity and profile
 
-The backend teammate owns the Supabase schema, signup trigger, existing-user backfill, RLS, and Storage SQL migrations. Auth and Media owns the signup and upload flows. This change does not apply or alter schema/Storage migrations.
+`src/auth/authService.ts`: `signUpWithEmail(email, password, fullName)` sends `options.data = { full_name: fullName.trim() }`, without `account_type`.
 
-## Shared configuration
+`AuthProvider` restores persisted sessions and follows auth events; a late initial read cannot overwrite newer state. The shared Supabase client enables PKCE, refresh, and URL session detection. Confirmation/recovery links should open in the requesting browser.
 
-The feature branch includes main's typed backend data access layer. Use one createClient<Database> instance with PKCE, persistent sessions, token refresh, and auth callback detection.
+`ProtectedWorkspace` waits for Auth, then mounts `AccountProvider` keyed by Auth ID. It loads `users`, memberships, and organization projections. Onboarding completion is persisted in Postgres. Account/query changes hide stale data and ignore late requests.
 
-Configure VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY with the project's browser-safe publishable key. .env.local must stay out of Git.
+`ProfilePage` saves details through `src/lib/api/users.ts`; display `users.full_name`, not editable Auth metadata. Privacy lives in `users`; notification preferences live in `user_settings`.
 
-## Signup contract
+## Media
 
-The signup screen requires explicit account-type selection. The service signature is:
-
-```tsx
-const { signUp } = useAuth()
-const result = await signUp(email, password, fullName, accountType)
-// accountType must be 'volunteer' or 'organization'.
+```ts
+const { path, url } = await uploadAvatar(file)
+// users.avatar_path and users.avatar_url are already persisted.
+// Refresh AccountProvider; do not issue a duplicate profile write.
 ```
 
-The exact Auth signup metadata is:
+`src/lib/api/storage.ts` verifies Auth, validates size/type, creates unique paths, and compensates failed DB writes. Old owned files are removed only after saving their replacements. Storage policies enforce folder/role scopes. A private background queue handles deferred cleanup; editable references cannot authorize deletion outside the relevant owner's folder.
 
-```json
-{
-  "full_name": "Kai Volunteer",
-  "account_type": "volunteer"
-}
-```
+Images in these buckets are public. Private profile fields are served through restricted `users` access and `get_user_profile_for_organization`.
 
-The service validates account_type and a nonempty full_name before calling Supabase. The backend trigger validates those fields and creates profiles.id = auth.users.id. No client INSERT fallback is used. Users with no session yet receive email-confirmation feedback rather than proceeding as authenticated users.
+## Routes
 
-The frontend's existing signup action currently creates a mock local user. Replace that call with await signUp(...), including the selected account type. Do not keep a second account-type chooser after signup. Other onboarding details may still be collected after authentication according to the backend's completion contract.
+- Public: `/`, `/signup`, `/login`, `/forgot-password`, `/reset-password`.
+- Personal: `/onboarding`, `/app`, `/app/explore`, `/app/events`, `/app/hours`, `/app/profile`, `/app/settings`, `/app/feed`, `/app/notifications`.
+- Organization discovery: `/app/organizations`, `/app/organizations/new`, `/app/organizations/:id`.
+- Workspace: `/manage/:id` plus opportunities/registrations/members/volunteers/analytics/posts/settings.
+- `/people/:id` uses the privacy RPC; `/admin` requires platform-admin status.
 
-## Session and profile contract
+Membership changes, registration/capacity, attendance, hour verification, ownership, verification, and deletion preparation run through SQL RPCs. Normal edits use RLS and column grants. Do not replace sensitive RPCs with unrestricted table updates.
 
-Wrap the existing frontend routes in AuthProvider once. useAuth supplies user, session, loading, signIn, signUp, and signOut. Replace mock localStorage sessionUserId with the actual Supabase session as the source of authentication.
+## Account deletion
 
-Load getProfile(user.id), or use useProfile(user?.id), after a real session is available. Display names and avatars must come from profiles.full_name and profiles.avatar_url. Read account_type from the saved profile for role routing, not from editable Auth metadata.
+Settings previews owned organizations, blocks shared ownership until transfer, and requires typed `DELETE` plus per-organization confirmation. It invokes `delete-account` with `{ deleteOwnedOrganizations: boolean }` and reports success only after `{ deleted: true }`.
 
-The standalone ProfilePage now reads this database profile. useProfile returns profile, loading, error, and setProfile. Its setProfile updates the local cache after a successful upload; it does not write the database. A missing profile displays an error and blocks uploads, so trigger/backfill issues are visible rather than hidden by a metadata fallback.
+The function verifies Auth and prepares a deletion plan. Shared owned organizations block deletion until ownership is transferred. It removes Auth-owned Storage objects (including orphans), solely owned organization media/data, and then the Auth user. Transferred organizations are retained. Server keys stay server-side.
 
-Adapt the frontend's existing useSession and guards to this real session/profile pair. Wait for loading to finish and handle profile errors separately from being signed out. The complete frontend layout and routes remain the integration foundation.
+Storage/Auth/DB changes are not one distributed transaction: an interruption may leave partial media cleanup and require retry. Normal new memberships, organization creation, and uploads are fenced during deletion. Failed attempts release flags; hard terminations may require the service-only cancellation RPC in the deployment guide.
 
-## Avatar contract
+## Future team integration
 
-```tsx
-const { profile: savedProfile } = await uploadAvatar(file, user.id)
-setProfile(savedProfile)
-```
+Connected screens in `src/application` replace the prototype's pages and mock store. Other branches can continue independently. Agree on the database deployment/version before integrating. Keep signup metadata, `users` fields, membership roles, and RPC signatures aligned. Reuse the tested Auth provider and API helpers. Do not merge both old and new signup triggers or restore `profiles.account_type`. Review ordered migrations before applying them to an existing dataset.
 
-uploadAvatar takes the original File and the Auth user ID. It validates the signed-in user against that ID, uploads to the avatars bucket under <Auth user ID>/avatar, and calls the backend updateProfile({ avatar_url }) method. That method scopes the database update to the authenticated user's profile ID. The returned profile contains the saved avatar_url; update the frontend profile cache from that row.
-
-The helper already persists profiles.avatar_url. Callers should not perform a duplicate profile update. Auth avatar metadata is no longer written or used for display. The returned object also includes path and publicUrl for callers that need them.
-
-The current ImageUpload component returns a local data URL. Change the avatar picker to pass the original File or add a File callback. The helper supports JPEG, PNG, and WebP up to 5 MiB. Cover photos, post images, and opportunity images need separate object names and backend-owned policies; do not reuse the single-avatar path for them.
-
-Storage and profile writes are not one transaction. A profile-write failure is surfaced as an upload-flow failure even though the Storage object may already have been replaced. A retry uses the same own-user path.
-
-## Remaining integration work
-
-Resolve full-frontend layout and routing conflicts using its App routes, design tokens, layout components, and Logo. Keep the Tailwind plugin plus the Vitest setup. Combine dependencies in package.json and regenerate the lockfile.
-
-Keep generated database models for requests and adapt display models where names differ. UI approved maps to database accepted for applications; cancelled/removed workflows need backend agreement. UI draft/published is not equivalent to database open/closed.
-
-The backend teammate deploys and versions the trigger/backfill/Storage policies. Existing Storage SQL was applied manually earlier in development; backend ownership includes reconciling migration history. Existing Auth users may need backfill before this database-profile flow can work for them.
-
-Run npm test, npm run build, and npm run lint. Then test real signup for both account types, profile creation with matching Auth UUID, avatar persistence after refresh, logout, session restoration, and rejected cross-user writes against the backend-managed project.
-
-## Frontend integration status
-
-Current (users + organizations schema):
-
-- `AuthProvider` wraps all routes, with `ProfileProvider` + `SessionBridge` inside it. Supabase Auth is the only source of "who is signed in"; the mock `login`, `signup`, `logout`, `loginDemo` actions and demo credentials are gone.
-- Signup (`src/pages/auth/SignupPage.tsx`) calls `signUp(email, password, fullName, extraMetadata?)`. Metadata is `full_name` plus optional `first_name`, `last_name`, `terms_accepted_at`; **no `account_type`**. The trigger creates the `public.users` row from `full_name` / `avatar_url`.
-- After signup the person picks volunteer or organization on `/onboarding/account-type`. This is a local UI choice only: the database has no account type. Volunteers call `complete_user_onboarding`; organizations call `complete_user_onboarding` then `create_organization`, which makes them the owner. Both calls are skipped when already done. `terms_accepted: true` is sent only if the signup form recorded acceptance, otherwise onboarding shows a terms checkbox.
-- `useSession()` combines the Auth session, the `users` row, and the user's memberships. A row-load failure shows an error screen (retry / log out) and is never treated as signed out.
-- Avatar uploads use `uploadAvatar` (2 MiB limit) and save `avatar_url` + `avatar_path` on `users`.
-- Display-name edits are written to `users` (`first_name`, `last_name`, `full_name`).
-- Password reset, password change, email change, resend-confirmation, and "remember me" are real.
-- Delete account is real (Edge Function); see `docs/ACCOUNT_DELETION_AND_OWNERSHIP.md`.
-
-Still mock (local store only): volunteer and organization profile content beyond what onboarding sends, opportunities, registrations, hours, follows, notifications, settings, posts. Notable gaps against the database model: no date of birth is collected (needed for `min_age` registration checks), no organization membership/invite UI, no `join_policy` choice (new organizations default to `approval`), organization logos/covers are not uploaded to Storage, and UI registration statuses do not yet map to the database `registration_status`.
+The ownership RPC returns `organization_memberships`, matching main. Organization deletion is a separate owner-only flow requiring the exact organization name and acknowledgement; it leaves member Auth accounts intact.

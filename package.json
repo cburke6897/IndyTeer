@@ -9,11 +9,15 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:db": "node --test scripts/stabilization.test.mjs",
+    "test:db": "node --test scripts/database.test.mjs scripts/stabilization.test.mjs",
     "types:generate": "node scripts/generate-types.mjs",
-    "check:edge": "npm exec --yes --package=deno -- deno check supabase/functions/delete-account/index.ts supabase/functions/delete-organization/index.ts",
+    "check:edge": "npm exec --yes --package=deno -- deno check supabase/functions/delete-account/index.ts supabase/functions/delete-organization/index.ts supabase/functions/background-worker/index.ts",
     "check": "npm run lint && npm test && npm run test:db && npm run test:config && npm run build",
-    "test:config": "node --test scripts/config.test.mjs"
+    "test:config": "node --test scripts/config.test.mjs",
+    "test:e2e": "playwright test",
+    "test:edge": "npm exec --yes --package=deno -- deno test --allow-env supabase/functions/tests",
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "test:live": "node scripts/live-smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
@@ -48,5 +52,8 @@
     "typescript-eslint": "^8.72.1",
     "vite": "^8.3.6",
     "vitest": "^5.1.0"
+  },
+  "overrides": {
+    "minimatch": "11.0.1"
   }
 }

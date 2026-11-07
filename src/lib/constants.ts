@@ -1,11 +1,10 @@
 export const CATEGORIES = [
   'Environment',
-  'Education',
+  'Education & Youth',
   'Animal Welfare',
-  'Food & Hunger',
-  'Healthcare',
-  'Community Development',
-  'Youth & Mentoring',
+  'Hunger & Food',
+  'Health',
+  'Community Events',
   'Arts & Culture',
   'Seniors',
   'Veterans',
@@ -63,6 +62,10 @@ export const IMG = {
 }
 
 export const CATEGORY_IMAGE: Record<string, string> = {
+  'Education & Youth': IMG.school,
+  'Hunger & Food': IMG.warehouse,
+  Health: IMG.doctor,
+  'Community Events': IMG.group,
   Environment: IMG.cleanup,
   Education: IMG.school,
   'Animal Welfare': IMG.animals,

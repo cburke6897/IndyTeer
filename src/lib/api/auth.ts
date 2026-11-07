@@ -4,7 +4,7 @@ export async function signUp(email: string, password: string, fullName: string) 
   const { data, error } = await db.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName } },
+    options: { data: { full_name: fullName.trim() }, emailRedirectTo: window.location.origin },
   })
   if (error) throw new Error(error.message)
   return data
@@ -32,7 +32,7 @@ export function onAuthStateChange(callback: Parameters<typeof db.auth.onAuthStat
 }
 
 export async function resetPassword(email: string): Promise<void> {
-  const { error } = await db.auth.resetPasswordForEmail(email)
+  const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + "/reset-password" })
   if (error) throw new Error(error.message)
 }
 
@@ -46,7 +46,4 @@ export async function updateEmail(email: string): Promise<void> {
   if (error) throw new Error(error.message)
 }
 
-export async function deleteAccount(): Promise<void> {
-  const { error } = await db.functions.invoke('delete-account', { method: 'POST' })
-  if (error) throw new Error(error.message)
-}
+export { deleteAccount } from '../../account/deleteAccountService'

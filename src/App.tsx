@@ -1,112 +1,164 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
-import { AppShell } from './components/layout/AppShell'
-import { PublicOnly, RequireOnboarding, RequireRole } from './components/layout/RouteGuards'
-import { Toaster } from './components/ui/Toaster'
+import { lazy, Suspense } from 'react'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthProvider'
-import { ProfileProvider } from './auth/ProfileProvider'
-import { SessionBridge } from './auth/SessionBridge'
-import { LinkButton } from './components/ui/Button'
-import LandingPage from './pages/LandingPage'
-import LoginPage from './pages/auth/LoginPage'
-import SignupPage from './pages/auth/SignupPage'
-import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
-import ResetPasswordPage from './pages/auth/ResetPasswordPage'
-import AccountTypePage from './pages/onboarding/AccountTypePage'
-import VolunteerOnboardingPage from './pages/onboarding/VolunteerOnboardingPage'
-import OrgOnboardingPage from './pages/onboarding/OrgOnboardingPage'
-import DashboardPage from './pages/volunteer/DashboardPage'
-import ExplorePage from './pages/volunteer/ExplorePage'
-import MyEventsPage from './pages/volunteer/MyEventsPage'
-import MyHoursPage from './pages/volunteer/MyHoursPage'
-import OrganizationsPage from './pages/volunteer/OrganizationsPage'
-import OverviewPage from './pages/org/OverviewPage'
-import MyOpportunitiesPage from './pages/org/MyOpportunitiesPage'
-import OpportunityEditorPage from './pages/org/OpportunityEditorPage'
-import RegistrationsPage from './pages/org/RegistrationsPage'
-import VolunteersPage from './pages/org/VolunteersPage'
-import AnalyticsPage from './pages/org/AnalyticsPage'
-import OpportunityDetailPage from './pages/shared/OpportunityDetailPage'
-import OrgProfilePage from './pages/shared/OrgProfileView'
-import VolunteerProfilePage from './pages/shared/VolunteerProfileView'
-import SettingsPage from './pages/shared/SettingsPage'
+import { Toaster } from './components/ui/Toaster'
+import { ProtectedWorkspace } from './application/Workspace'
+import { Landing } from './application/Landing'
+import { PublicProfileShell } from './application/PublicProfileShell'
+import { LegacyOrganizationRoute } from './application/LegacyOrganizationRoute'
 
-function ScrollToTop() {
-  const { pathname } = useLocation()
-  useEffect(() => { window.scrollTo(0, 0) }, [pathname])
-  return null
-}
-
-function NotFound() {
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
-      <p className="text-sm font-bold text-navy-700">404</p>
-      <h1 className="text-3xl">Page not found</h1>
-      <p className="text-muted">That page doesn’t exist or was moved.</p>
-      <LinkButton to="/" variant="primary">Back to IndyTeer</LinkButton>
-    </div>
-  )
-}
+const AuthPage = lazy(() =>
+  import('./application/AuthPages').then((m) => ({ default: m.AuthPage })),
+)
+const ProfilePage = lazy(() =>
+  import('./application/ProfilePages').then((m) => ({ default: m.ProfilePage })),
+)
+const SettingsPage = lazy(() =>
+  import('./application/ProfilePages').then((m) => ({ default: m.SettingsPage })),
+)
+const ExplorePage = lazy(() =>
+  import('./application/OpportunityPages').then((m) => ({ default: m.ExplorePage })),
+)
+const OpportunityDetailPage = lazy(() =>
+  import('./application/OpportunityPages').then((m) => ({ default: m.OpportunityDetailPage })),
+)
+const MyEventsPage = lazy(() =>
+  import('./application/OpportunityPages').then((m) => ({ default: m.MyEventsPage })),
+)
+const OpportunityEditorPage = lazy(() =>
+  import('./application/OpportunityPages').then((m) => ({ default: m.OpportunityEditorPage })),
+)
+const OrganizationsPage = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({ default: m.OrganizationsPage })),
+)
+const OrganizationDetailPage = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({ default: m.OrganizationDetailPage })),
+)
+const CreateOrganizationPage = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({ default: m.CreateOrganizationPage })),
+)
+const OrganizationWorkspace = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({ default: m.OrganizationWorkspace })),
+)
+const OrganizationOverviewPage = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({ default: m.OrganizationOverviewPage })),
+)
+const OrganizationOpportunitiesPage = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({
+    default: m.OrganizationOpportunitiesPage,
+  })),
+)
+const OrganizationRegistrationsPage = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({
+    default: m.OrganizationRegistrationsPage,
+  })),
+)
+const OrganizationMembersPage = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({ default: m.OrganizationMembersPage })),
+)
+const OrganizationSettingsPage = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({ default: m.OrganizationSettingsPage })),
+)
+const OrganizationAnalyticsPage = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({ default: m.OrganizationAnalyticsPage })),
+)
+const OrganizationVolunteersPage = lazy(() =>
+  import('./application/OrganizationPages').then((m) => ({
+    default: m.OrganizationVolunteersPage,
+  })),
+)
+const DashboardPage = lazy(() =>
+  import('./application/CommunityPages').then((m) => ({ default: m.DashboardPage })),
+)
+const HoursPage = lazy(() =>
+  import('./application/CommunityPages').then((m) => ({ default: m.HoursPage })),
+)
+const FeedPage = lazy(() =>
+  import('./application/CommunityPages').then((m) => ({ default: m.FeedPage })),
+)
+const OrganizationPostsPage = lazy(() =>
+  import('./application/CommunityPages').then((m) => ({ default: m.OrganizationPostsPage })),
+)
+const NotificationsPage = lazy(() =>
+  import('./application/CommunityPages').then((m) => ({ default: m.NotificationsPage })),
+)
+const PersonPage = lazy(() =>
+  import('./application/CommunityPages').then((m) => ({ default: m.PersonPage })),
+)
+const AdminPage = lazy(() =>
+  import('./application/CommunityPages').then((m) => ({ default: m.AdminPage })),
+)
 
 export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-      <ProfileProvider>
-      <SessionBridge />
-      <ScrollToTop />
-      <Routes>
-        <Route element={<PublicOnly />}>
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-        </Route>
-
-        {/* Recovery links sign the user in first, so this route must not bounce signed-in users. */}
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-
-        <Route element={<RequireOnboarding />}>
-          <Route path="/onboarding/account-type" element={<AccountTypePage />} />
-          <Route path="/onboarding/volunteer" element={<VolunteerOnboardingPage />} />
-          <Route path="/onboarding/organization" element={<OrgOnboardingPage />} />
-        </Route>
-
-        <Route element={<RequireRole role="volunteer" />}>
-          <Route path="/app" element={<AppShell role="volunteer" />}>
-            <Route index element={<DashboardPage />} />
-            <Route path="explore" element={<ExplorePage />} />
-            <Route path="opportunities/:id" element={<OpportunityDetailPage />} />
-            <Route path="events" element={<MyEventsPage />} />
-            <Route path="hours" element={<MyHoursPage />} />
-            <Route path="organizations" element={<OrganizationsPage />} />
-            <Route path="organizations/:id" element={<OrgProfilePage />} />
-            <Route path="profile" element={<VolunteerProfilePage own />} />
-            <Route path="settings" element={<SettingsPage />} />
-          </Route>
-        </Route>
-
-        <Route element={<RequireRole role="organization" />}>
-          <Route path="/org" element={<AppShell role="organization" />}>
-            <Route index element={<OverviewPage />} />
-            <Route path="opportunities" element={<MyOpportunitiesPage />} />
-            <Route path="opportunities/new" element={<OpportunityEditorPage mode="create" />} />
-            <Route path="opportunities/:id" element={<OpportunityDetailPage />} />
-            <Route path="opportunities/:id/edit" element={<OpportunityEditorPage mode="edit" />} />
-            <Route path="registrations" element={<RegistrationsPage />} />
-            <Route path="volunteers" element={<VolunteersPage />} />
-            <Route path="volunteers/:id" element={<VolunteerProfilePage />} />
-            <Route path="profile" element={<OrgProfilePage own />} />
-            <Route path="analytics" element={<AnalyticsPage />} />
-            <Route path="settings" element={<SettingsPage />} />
-          </Route>
-        </Route>
-
-        <Route path="/home" element={<Navigate to="/" replace />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
-      <Toaster />
-      </ProfileProvider>
+        <Suspense
+          fallback={
+            <p className="p-12 text-center text-muted" role="status">
+              Loading IndyTeer…
+            </p>
+          }
+        >
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/login" element={<AuthPage mode="login" />} />
+            <Route path="/signup" element={<AuthPage mode="signup" />} />
+            <Route path="/forgot-password" element={<AuthPage mode="forgot" />} />
+            <Route path="/reset-password" element={<AuthPage mode="reset" />} />
+            <Route element={<ProtectedWorkspace />}>
+              <Route path="/org/*" element={<LegacyOrganizationRoute/>}/>
+              <Route path="/onboarding/*" element={<Navigate to="/onboarding" replace/>}/>
+              <Route path="/onboarding" element={<ProfilePage onboarding />} />
+              <Route path="/app" element={<DashboardPage />} />
+              <Route path="/app/explore" element={<ExplorePage />} />
+              <Route path="/app/events" element={<MyEventsPage />} />
+              <Route path="/app/hours" element={<HoursPage />} />
+              <Route path="/app/feed" element={<FeedPage />} />
+              <Route path="/app/notifications" element={<NotificationsPage />} />
+              <Route path="/app/profile" element={<ProfilePage />} />
+              <Route path="/app/settings" element={<SettingsPage />} />
+              <Route path="/app/organizations" element={<OrganizationsPage />} />
+              <Route path="/app/organizations/new" element={<CreateOrganizationPage />} />
+              <Route
+                path="/app/organizations/:organizationId"
+                element={<OrganizationDetailPage />}
+              />
+              <Route path="/app/opportunities/:opportunityId" element={<OpportunityDetailPage />} />
+              <Route path="/admin" element={<AdminPage />} />
+              <Route path="/manage/:organizationId" element={<OrganizationWorkspace />}>
+                <Route index element={<OrganizationOverviewPage />} />
+                <Route path="opportunities" element={<OrganizationOpportunitiesPage />} />
+                <Route path="opportunities/new" element={<OpportunityEditorPage />} />
+                <Route
+                  path="opportunities/:opportunityId/edit"
+                  element={<OpportunityEditorPage />}
+                />
+                <Route path="registrations" element={<OrganizationRegistrationsPage />} />
+                <Route path="members" element={<OrganizationMembersPage />} />
+                <Route path="volunteers" element={<OrganizationVolunteersPage />} />
+                <Route path="analytics" element={<OrganizationAnalyticsPage />} />
+                <Route path="posts" element={<OrganizationPostsPage />} />
+                <Route path="settings" element={<OrganizationSettingsPage />} />
+              </Route>
+            </Route>
+            <Route path="/profile" element={<Navigate to="/app/profile" replace />} />
+            <Route path="/people/:userId" element={<PublicProfileShell><PersonPage/></PublicProfileShell>}/>
+            <Route path="/home" element={<Navigate to="/" replace/>}/>
+            <Route
+              path="*"
+              element={
+                <div className="grid min-h-screen place-content-center gap-4 text-center">
+                  <h1 className="text-4xl">Page not found</h1>
+                  <a className="text-navy-700 underline" href="/">
+                    Return to IndyTeer
+                  </a>
+                </div>
+              }
+            />
+          </Routes>
+        </Suspense>
+        <Toaster />
       </AuthProvider>
     </BrowserRouter>
   )

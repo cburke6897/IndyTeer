@@ -7,9 +7,8 @@ import { listMyMemberships, listOrganizationMemberships } from '../lib/api/organ
  * the user's Storage objects, deletes organizations they own, then deletes the Auth user (which
  * cascades to public.users and everything keyed to it).
  *
- * There is no ownership-transfer workflow in the database yet, so an organization with other active
- * members cannot be handed over. The function refuses to delete such an organization, and the UI
- * blocks the flow up front using the same rule.
+ * Ownership transfer is available from the organization Members page. Shared ownership blocks
+ * account deletion until transfer, while a separate organization deletion flow requires explicit consent.
  */
 
 export interface OwnedOrganization {
@@ -33,7 +32,10 @@ export async function getDeletionImpact(userId: string): Promise<DeletionImpact>
   const owned: OwnedOrganization[] = []
   if (ownedMemberships.length) {
     const ids = ownedMemberships.map((m) => m.organization_id)
-    const { data: organizations, error } = await supabase.from('organizations').select('id,name').in('id', ids)
+    const { data: organizations, error } = await supabase
+      .from('organizations')
+      .select('id,name')
+      .in('id', ids)
     if (error) throw new Error(error.message)
     const names = new Map((organizations ?? []).map((o) => [o.id, o.name]))
     for (const id of ids) {
@@ -42,7 +44,8 @@ export async function getDeletionImpact(userId: string): Promise<DeletionImpact>
       owned.push({
         id,
         name: names.get(id) ?? 'Your organization',
-        otherActiveMembers: everyone.filter((m) => m.user_id !== userId && m.status === 'active').length,
+        otherActiveMembers: everyone.filter((m) => m.user_id !== userId && m.status === 'active')
+          .length,
       })
     }
   }
@@ -59,7 +62,12 @@ export class DeleteAccountError extends Error {
   kind: DeleteFailureKind
   code: string | null
   organizations: OwnedOrganization[]
-  constructor(message: string, kind: DeleteFailureKind, code: string | null = null, organizations: OwnedOrganization[] = []) {
+  constructor(
+    message: string,
+    kind: DeleteFailureKind,
+    code: string | null = null,
+    organizations: OwnedOrganization[] = [],
+  ) {
     super(message)
     this.name = 'DeleteAccountError'
     this.kind = kind
@@ -93,10 +101,19 @@ export async function deleteAccount(options: { deleteOwnedOrganizations: boolean
       const status = error.context instanceof Response ? error.context.status : 0
       const body = (await (error.context as Response).json().catch(() => null)) as ErrorBody | null
       if (status === 409) {
-        throw new DeleteAccountError(body?.error ?? 'Your account cannot be deleted yet.', 'blocked', body?.code ?? null, body?.organizations ?? [])
+        throw new DeleteAccountError(
+          body?.error ?? 'Your account cannot be deleted yet.',
+          'blocked',
+          body?.code ?? null,
+          body?.organizations ?? [],
+        )
       }
       if (status === 401) {
-        throw new DeleteAccountError('Your session could not be verified. Log in again, then retry. Nothing was deleted.', 'blocked', 'UNAUTHENTICATED')
+        throw new DeleteAccountError(
+          'Your session could not be verified. Log in again, then retry. Nothing was deleted.',
+          'blocked',
+          'UNAUTHENTICATED',
+        )
       }
     }
     // 5xx, network failure, or relay error: the function may have gotten part-way.

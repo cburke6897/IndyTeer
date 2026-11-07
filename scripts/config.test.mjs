@@ -2,6 +2,12 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 
+test('Hosted smoke testing requires an explicit disposable-QA opt-in',()=>{
+ const result=spawnSync(process.execPath,['scripts/live-smoke.mjs','--project-ref=shiuqwmvvcmorfiyxttg'],{encoding:'utf8'})
+ assert.notEqual(result.status,0)
+ assert.match(result.stderr,/allow-tagged-qa/)
+})
+
 test('Public builds reject secret and service-role keys without logging their values', () => {
   const jwt =
     'header.' +
