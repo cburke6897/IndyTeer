@@ -1,4 +1,5 @@
 import { toast, type ToastKind } from './toast'
+import { plainError } from '../lib/messages'
 
 /**
  * Runs a write to the database from an event handler. Shows `success` when it works and the error
@@ -14,7 +15,7 @@ export async function act<T>(
     if (success) toast(typeof success === 'function' ? success(result) : success, kind)
     return result
   } catch (cause) {
-    toast(cause instanceof Error && cause.message ? cause.message : 'Something went wrong. Try again.', 'error')
+    toast(plainError(cause instanceof Error ? cause.message : null), 'error')
     return undefined
   }
 }

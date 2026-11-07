@@ -20,7 +20,7 @@
 
   --color-surface: #f7f8fa;
   --color-ink: #202938;
-  --color-muted: #687385;
+  --color-muted: #4a5568;
   --color-line: #e5e8ed;
   --color-line-strong: #d3d8e0;
 
@@ -48,15 +48,19 @@
     background: var(--color-surface);
     color: var(--color-ink);
     font-family: var(--font-sans);
-    font-size: 15px;
-    line-height: 1.5;
+    font-size: 17px;
+    line-height: 1.55;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
   }
   h1, h2, h3, h4 { color: var(--color-navy); letter-spacing: -0.01em; font-weight: 700; }
   button { cursor: pointer; }
   button:disabled { cursor: not-allowed; }
-  :focus-visible { outline: 2px solid var(--color-navy-700); outline-offset: 2px; border-radius: 4px; }
+  :focus-visible { outline: 3px solid var(--color-navy-700); outline-offset: 3px; border-radius: 4px; }
+  aside :focus-visible { outline-color: var(--color-gold); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  }
   ::selection { background: var(--color-gold-100); }
 }
 

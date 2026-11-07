@@ -34,3 +34,18 @@ export async function getVolunteerDashboard() {
   if (error) throw new Error(error.message)
   return data as Record<string, unknown>
 }
+
+export type PublicPerson = { id: string; full_name: string; city: string | null; state: string | null; avatar_path: string | null; headline: string | null }
+
+/**
+ * Finds people by name among profiles their owners have made visible (public_users). Private
+ * profiles cannot be searched: the database offers no lookup by email or ID to organizations.
+ */
+export async function searchPublicPeople(query: string): Promise<PublicPerson[]> {
+  const term = query.trim().replace(/[%_,()]/g, ' ').trim()
+  if (term.length < 2) return []
+  const { data, error } = await db.from('public_users').select('id,full_name,city,state,avatar_path,headline')
+    .ilike('full_name', `%${term}%`).order('full_name').limit(10)
+  if (error) throw new Error(error.message)
+  return (data ?? []).filter((p): p is PublicPerson => !!p.id && !!p.full_name)
+}

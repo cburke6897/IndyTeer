@@ -12,14 +12,14 @@ const variants: Record<ButtonVariant, string> = {
   dangerOutline: 'bg-white text-danger border border-red-200 hover:bg-danger-50',
 }
 const sizes: Record<ButtonSize, string> = {
-  sm: 'h-8 px-3 text-[13px]',
-  md: 'h-10 px-4 text-sm',
-  lg: 'h-12 px-6 text-[15px]',
+  sm: 'h-10 px-4 text-[15px]',
+  md: 'h-11 px-5 text-base',
+  lg: 'h-13 px-6 text-base',
 }
 
 export function buttonClass(variant: ButtonVariant = 'primary', size: ButtonSize = 'md', extra?: string) {
   return cn(
-    'inline-flex items-center justify-center gap-2 rounded-md font-semibold whitespace-nowrap transition-colors disabled:opacity-50 disabled:pointer-events-none',
+    'inline-flex items-center justify-center gap-2 rounded-md font-semibold whitespace-normal text-center transition-colors disabled:opacity-50 disabled:pointer-events-none',
     variants[variant], sizes[size], extra,
   )
 }

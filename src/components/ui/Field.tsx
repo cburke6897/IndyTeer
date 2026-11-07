@@ -1,7 +1,7 @@
 import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react'
 import { cn } from '../../lib/utils'
 
-const control = 'block w-full rounded-md border bg-white px-3 text-sm text-ink placeholder:text-muted/70 transition-colors focus:outline-none focus:ring-2 focus:ring-navy-700/25 focus:border-navy-700 disabled:bg-surface disabled:text-muted'
+const control = 'block w-full rounded-md border bg-white px-3.5 text-base text-ink placeholder:text-muted/80 transition-colors focus:outline-none focus:ring-3 focus:ring-navy-700/30 focus:border-navy-700 disabled:bg-surface disabled:text-muted'
 
 interface FieldProps {
   label: string
@@ -17,15 +17,15 @@ export function Field({ label, error, hint, optional, className, children }: Fie
   const describedBy = error ? `${id}-err` : hint ? `${id}-hint` : undefined
   return (
     <div className={className}>
-      <label htmlFor={id} className="mb-1.5 flex items-baseline justify-between text-[13px] font-semibold text-ink">
+      <label htmlFor={id} className="mb-1.5 flex items-baseline justify-between text-[15px] font-semibold text-ink">
         <span>{label}</span>
-        {optional && <span className="text-xs font-normal text-muted">Optional</span>}
+        {optional && <span className="text-sm font-normal text-muted">Optional</span>}
       </label>
       {children(id, describedBy)}
       {error ? (
-        <p id={`${id}-err`} role="alert" className="mt-1.5 text-xs font-medium text-danger">{error}</p>
+        <p id={`${id}-err`} role="alert" className="mt-1.5 text-sm font-medium text-danger">{error}</p>
       ) : hint ? (
-        <p id={`${id}-hint`} className="mt-1.5 text-xs text-muted">{hint}</p>
+        <p id={`${id}-hint`} className="mt-1.5 text-sm text-muted">{hint}</p>
       ) : null}
     </div>
   )
@@ -37,7 +37,7 @@ export function TextInput({ label, error, hint, optional, wrapperClassName, clas
   return (
     <Field label={label} error={error} hint={hint} optional={optional} className={wrapperClassName}>
       {(id, d) => (
-        <input id={id} aria-invalid={!!error} aria-describedby={d} className={cn(control, 'h-10', error ? 'border-danger' : 'border-line-strong', className)} {...rest} />
+        <input id={id} aria-invalid={!!error} aria-describedby={d} className={cn(control, 'h-11', error ? 'border-danger' : 'border-line-strong', className)} {...rest} />
       )}
     </Field>
   )
@@ -57,7 +57,7 @@ export function SelectInput({ label, error, hint, optional, wrapperClassName, cl
   return (
     <Field label={label} error={error} hint={hint} optional={optional} className={wrapperClassName}>
       {(id, d) => (
-        <select id={id} aria-invalid={!!error} aria-describedby={d} className={cn(control, 'h-10 pr-8', error ? 'border-danger' : 'border-line-strong', className)} {...rest}>
+        <select id={id} aria-invalid={!!error} aria-describedby={d} className={cn(control, 'h-11 pr-8', error ? 'border-danger' : 'border-line-strong', className)} {...rest}>
           {children}
         </select>
       )}

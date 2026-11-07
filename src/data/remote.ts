@@ -1,11 +1,12 @@
 import { db as sb } from '../lib/api/client'
 import { getPublicImageUrl } from '../lib/api/storage'
 import { getUserProfileForOrganization } from '../lib/api/users'
+import { listOrganizationMembers } from '../lib/api/organizations'
 import { ORG_COLORS } from '../lib/constants'
 import type { Tables } from '../types/database'
 import type { OrganizationMembership, User as UserRow } from '../types/models'
 import type {
-  AppNotification, DB, ManualHourLog, Membership, Opportunity, OrgProfile, Post, Registration, Settings, User,
+  AppNotification, DB, ManualHourLog, Membership, Opportunity, OrgPerson, OrgProfile, Post, Registration, Settings, User,
   VolunteerProfile,
 } from '../types'
 import { defaultSettings } from './defaults'
@@ -24,7 +25,7 @@ export interface SnapshotCtx {
 
 export type Snapshot = Pick<DB,
   'volunteers' | 'organizations' | 'opportunities' | 'registrations' | 'manualHours' | 'follows' | 'saved' |
-  'posts' | 'notifications' | 'settings' | 'availability' | 'memberships' | 'activeOrgId'> & { users: User[] }
+  'posts' | 'notifications' | 'settings' | 'availability' | 'memberships' | 'orgPeople' | 'activeOrgId'> & { users: User[] }
 
 const hhmm = (t: string) => t.slice(0, 5)
 const imageUrl = (bucket: string, path: string | null | undefined, direct?: string | null) =>
@@ -134,6 +135,7 @@ export function mapOrg(row: PublicOrgRow | OrgRow, full?: OrgRow): OrgProfile {
     city: row.city ?? '', state: row.state ?? 'IN', email: full?.contact_email ?? '', phone: full?.phone ?? '',
     focus: row.focus ?? [], verified: !!row.verified,
     founded: row.founded_year ?? new Date(createdAt).getFullYear(), color: colorFor(id),
+    joinPolicy: (row as { join_policy?: string | null }).join_policy === 'invite_only' ? 'invite_only' : 'approval',
   }
 }
 
@@ -168,6 +170,10 @@ export function mapNotification(n: Tables<'notifications'>): AppNotification {
   if (n.type === 'registration') link = data.status ? '/app/events' : '/org/registrations'
   else if (n.type === 'opportunity' && typeof data.opportunity_id === 'string') link = `/app/opportunities/${data.opportunity_id}`
   else if (n.type === 'follow') link = '/org/volunteers'
+  // A join request (has user_id) goes to the admins' People page; everything else about membership goes to the person's own organizations.
+  else if (n.type === 'membership' && typeof data.user_id === 'string') link = '/org/people'
+  else if (n.type === 'membership' || n.type === 'membership_invite') link = '/app/organizations'
+  else if (n.type === 'ownership') link = '/org/people'
   else if (n.type === 'hours') link = '/app/hours'
   return { id: n.id, userId: n.user_id, text: n.message, link, read: !!n.read_at, createdAt: n.created_at }
 }
@@ -202,6 +208,23 @@ async function must<T>(query: PromiseLike<{ data: T | null; error: { message: st
   return (data ?? []) as T
 }
 
+/** People in the organizations the user manages. A server without list_organization_members just yields none. */
+async function loadOrgPeople(orgIds: string[]): Promise<Record<string, OrgPerson[]>> {
+  const result: Record<string, OrgPerson[]> = {}
+  await Promise.all(orgIds.map(async (id) => {
+    try {
+      const rows = await listOrganizationMembers(id)
+      result[id] = rows.map((r) => ({
+        userId: r.user_id, name: r.full_name || 'Member', avatar: imageUrl('avatars', r.avatar_path),
+        role: r.role, status: r.status as OrgPerson['status'],
+      }))
+    } catch {
+      result[id] = []
+    }
+  }))
+  return result
+}
+
 /** Loads everything the current visitor may see. `ctx` is null when signed out (public data only). */
 export async function fetchSnapshot(ctx: SnapshotCtx | null, preferredOrgId: string | null): Promise<Snapshot> {
   const memberOrgIds = ctx ? ctx.memberships.filter((m) => m.status === 'active').map((m) => m.organization_id) : []
@@ -229,7 +252,7 @@ export async function fetchSnapshot(ctx: SnapshotCtx | null, preferredOrgId: str
   const empty = {
     volunteers: [] as VolunteerProfile[], registrations: [] as Registration[], manualHours: [] as ManualHourLog[],
     follows: [] as DB['follows'], saved: [] as DB['saved'], notifications: [] as AppNotification[],
-    settings: {} as Record<string, Settings>, users: [] as User[], memberships: [] as Membership[], activeOrgId: null as string | null,
+    settings: {} as Record<string, Settings>, users: [] as User[], memberships: [] as Membership[], orgPeople: {} as Record<string, OrgPerson[]>, activeOrgId: null as string | null,
   }
   if (!ctx) return { ...empty, organizations, opportunities, availability, posts: postRows.map(mapPost) }
 
@@ -266,7 +289,7 @@ export async function fetchSnapshot(ctx: SnapshotCtx | null, preferredOrgId: str
   }
 
   return {
-    users: [user], memberships, activeOrgId: pickActiveOrg(ctx.memberships, preferredOrgId),
+    users: [user], memberships, orgPeople: await loadOrgPeople(staffOrgIdsOf(ctx.memberships)), activeOrgId: pickActiveOrg(ctx.memberships, preferredOrgId),
     volunteers, organizations, opportunities, registrations, availability,
     manualHours: manualRows.map(mapManualHours),
     follows: followRows.map((f) => ({ volunteerId: f.user_id, orgId: f.organization_id })),

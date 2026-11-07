@@ -688,3 +688,75 @@ test('Main deletion choices are exact, transactional, and preserve other owners'
  assert.equal((await pg.query('select created_by from public.organizations where id=$1',[org.id])).rows[0].created_by,member)
  await pg.query('select public.cancel_account_deletion($1)',[owner])
 })
+
+test('Invitation opt-out blocks new invitations, leaves existing ones alone, and invitees can decline', async () => {
+  const owner = await user(),
+    invitee = await user(),
+    other = await user()
+  const org = await organization(owner)
+  const invite = (target) =>
+    asUser(owner, "select public.invite_user_to_organization($1,$2,'member')", [org.id, target])
+  const statusOf = async (target) =>
+    (
+      await asUser(
+        owner,
+        'select status from public.organization_memberships where organization_id=$1 and user_id=$2',
+        [org.id, target],
+      )
+    )[0]?.status
+
+  // An invitation that already exists is not changed when the user opts out afterwards.
+  await invite(invitee)
+  await asUser(
+    invitee,
+    'update public.user_settings set opt_out_organization_invites=true where user_id=$1',
+    [invitee],
+  )
+  assert.equal(await statusOf(invitee), 'invited')
+
+  // New invitations are refused by the database, not just hidden in the interface.
+  await asUser(
+    other,
+    'update public.user_settings set opt_out_organization_invites=true where user_id=$1',
+    [other],
+  )
+  await assert.rejects(() => invite(other), /opted out of organization invitations/)
+  assert.equal(await statusOf(other), undefined)
+
+  // Only the invited person can decline, only while the invitation is pending, and it is recorded as rejected.
+  await assert.rejects(
+    () => asUser(other, 'select public.decline_organization_invite($1)', [org.id]),
+    /No pending invitation/,
+  )
+  await asUser(invitee, 'select public.decline_organization_invite($1)', [org.id])
+  assert.equal(await statusOf(invitee), 'rejected')
+  await assert.rejects(
+    () => asUser(invitee, 'select public.decline_organization_invite($1)', [org.id]),
+    /No pending invitation/,
+  )
+
+  // While opted out they cannot be invited again; once they turn it off, they can.
+  await assert.rejects(() => invite(invitee), /opted out/)
+  await asUser(
+    invitee,
+    'update public.user_settings set opt_out_organization_invites=false where user_id=$1',
+    [invitee],
+  )
+  await invite(invitee)
+  assert.equal(await statusOf(invitee), 'invited')
+  await asUser(invitee, 'select public.accept_organization_invite($1)', [org.id])
+  assert.equal(await statusOf(invitee), 'active')
+})
+
+test('Invitations are refused while the organization is being deleted', async () => {
+  const owner = await user(),
+    target = await user()
+  const org = await organization(owner)
+  await asUser(owner, 'select public.prepare_organization_deletion($1)', [org.id])
+  await assert.rejects(
+    () => asUser(owner, "select public.invite_user_to_organization($1,$2,'member')", [org.id, target]),
+    /being deleted/,
+  )
+  await pg.query('select public.cancel_organization_deletion($1)', [org.id])
+  await asUser(owner, "select public.invite_user_to_organization($1,$2,'member')", [org.id, target])
+})

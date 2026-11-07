@@ -7,6 +7,15 @@ export interface Membership {
   status: 'invited' | 'pending' | 'active' | 'rejected' | 'removed'
 }
 
+/** A person in an organization, as shown to its owners and admins (names come from list_organization_members). */
+export interface OrgPerson {
+  userId: string
+  name: string
+  avatar: string | null
+  role: OrgRole
+  status: 'invited' | 'pending' | 'active' | 'rejected' | 'removed'
+}
+
 /** The standard IndyTeer user. There is no account type: organizations come from memberships. */
 export interface User {
   id: string
@@ -57,6 +66,8 @@ export interface OrgProfile {
   verified: boolean
   founded: number
   color: string
+  /** 'approval': anyone may ask to join; 'invite_only': only people an admin invites. */
+  joinPolicy: 'approval' | 'invite_only'
 }
 
 export type Recurrence = 'none' | 'weekly' | 'biweekly' | 'monthly'
@@ -168,6 +179,8 @@ export interface DB {
   availability: Record<string, number>
   /** The signed-in user's own memberships, any status. */
   memberships: Membership[]
+  /** People in each organization the user manages (owner/admin only; empty when the server cannot list them). */
+  orgPeople: Record<string, OrgPerson[]>
   /** The organization currently being managed (one of the user's active owner/admin memberships). */
   activeOrgId: string | null
   sessionUserId: string | null

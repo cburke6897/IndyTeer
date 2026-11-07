@@ -10,7 +10,7 @@ export function emptyDB(): DB {
   return {
     users: [], volunteers: [], organizations: [], opportunities: [], registrations: [], manualHours: [],
     follows: [], saved: [], posts: [], notifications: [], settings: {}, availability: {},
-    memberships: [], activeOrgId: null, sessionUserId: null, ready: false, key: '', loadError: null,
+    memberships: [], orgPeople: {}, activeOrgId: null, sessionUserId: null, ready: false, key: '', loadError: null,
   }
 }
 

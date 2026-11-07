@@ -12,6 +12,7 @@ import { OrgProfileHeader } from '../../components/domain/ProfileHeader'
 import { OrgProfileForm } from '../../components/domain/ProfileForms'
 import { displayUrl, formatDate, formatHours, plural } from '../../lib/utils'
 import { useSession } from '../../store/session'
+import { MembershipPanel } from '../../components/domain/membership'
 import { followerCount, getOrg, isPast, orgOpps, orgStats, orgVolunteers } from '../../store/selectors'
 
 /** Public organization page. Used by volunteers (/app/organizations/:id) and by the owning org (/org/profile). */
@@ -45,6 +46,7 @@ export default function OrgProfilePage({ own }: { own?: boolean }) {
 
       <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-6">
+          {!own && <MembershipPanel org={org} />}
           <Card className="p-5 sm:p-6">
             <h2 className="text-base">About</h2>
             <p className="mt-2 text-[15px] leading-relaxed text-ink/90">{org.description}</p>
