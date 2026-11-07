@@ -1,4 +1,4 @@
-# IndyTeer — independent complete-app branch
+# IndyTeer — connected application
 
 Volunteer discovery, organization workspaces, registration management, and verified hours for Indiana communities. React + TypeScript + Vite + Tailwind; Supabase Auth, Postgres, Storage, and Edge Functions provide the backend.
 
@@ -52,13 +52,13 @@ Integration entry points: **[docs/AUTH_MEDIA_INTEGRATION.md](docs/AUTH_MEDIA_INT
 
 ```powershell
 npm run check           # lint, frontend tests, database tests, typecheck/build
-npm run check:edge      # Deno typecheck for both server functions
+npm run check:edge      # Deno typecheck for all three server functions
 npm run test:edge       # endpoint tests with intercepted external requests
 npm run test:e2e        # browser workflows against isolated mock HTTP
 npm run types:generate # schema types from locally replayed SQL
 ```
 
-Database tests replay every migration in embedded real PostgreSQL (PGlite), exercising roles, RLS, grants, and RPCs. `supabase/tests/platform.sql` substitutes only Supabase-managed Auth/Storage scaffolding and must never be deployed. These tests do not verify hosted email delivery, PostgREST embedding, actual object transfer, deployed gateways, or the Docker stack. Follow the live checklist after deploying.
+Database tests replay every migration in embedded real PostgreSQL (PGlite), exercising roles, RLS, grants, and RPCs. `supabase/tests/platform.sql` substitutes only Supabase-managed Auth/Storage scaffolding and must never be deployed. The shared deployment additionally passed 12 real API checks covering Auth, PostgREST, Storage and deployed deletion endpoints. SMTP delivery and the Docker stack remain separate checks; see the stabilization report.
 
 Playwright uses Edge on Windows and Chromium elsewhere. On Linux/macOS run `npx playwright install chromium` first. Windows without Edge can change the browser channel in `playwright.config.ts`.
 
@@ -71,7 +71,7 @@ src/lib/api/           Typed Supabase queries, RPCs and uploads
 src/components/ui/     Shared navy/gold/white components
 src/types/             Domain models and migration-derived database types
 supabase/migrations/   Ordered schema, RLS, RPCs, Storage and queues
-supabase/functions/    delete-account and background-worker
+supabase/functions/    Account/org deletion and background-worker
 scripts/               Database tests/type generation; local-only demo seed
 e2e/                   Browser workflow tests with intercepted HTTP
 ```

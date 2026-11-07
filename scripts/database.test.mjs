@@ -663,3 +663,13 @@ test('Completed attendance and verified hours cannot be erased by volunteer canc
  await assert.rejects(()=>asUser(volunteer,'select public.cancel_registration($1)',[registration.id]),/Contact the organization/)
  assert.equal((await pg.query('select hours_verified from public.registrations where id=$1',[registration.id])).rows[0].hours_verified,true)
 })
+
+test('Cleanup preserves a restored active image until it becomes unreferenced again',async()=>{
+ const person=await user(),path=person+'/restored.png'
+ await asUser(person,'update public.users set avatar_path=$2 where id=$1',[person,path])
+ await asUser(person,'update public.users set avatar_path=null where id=$1',[person])
+ await asUser(person,'update public.users set avatar_path=$2 where id=$1',[person,path])
+ assert.equal((await pg.query('select * from public.claim_media_cleanup_jobs(100)')).rows.some(j=>j.path===path),false)
+ await asUser(person,'update public.users set avatar_path=null where id=$1',[person])
+ assert.equal((await pg.query('select * from public.claim_media_cleanup_jobs(100)')).rows.some(j=>j.path===path),true)
+})

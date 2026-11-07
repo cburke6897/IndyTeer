@@ -487,6 +487,7 @@ Tables: {"email_jobs": { Row: {"id": string;
 "mark_all_notifications_read": { Args: Record<never, never>; Returns: undefined };
 "mark_notification_read": { Args: {"p_notification_id": string}; Returns: undefined };
 "media_account_active": { Args: Record<never, never>; Returns: boolean };
+"media_is_referenced": { Args: {"p_bucket": string;"p_path": string}; Returns: boolean };
 "media_organization_active": { Args: {"p_bucket": string;"p_path": string}; Returns: boolean };
 "normalize_user_name": { Args: Record<never, never>; Returns: unknown };
 "notify_followers_on_publish": { Args: Record<never, never>; Returns: unknown };
