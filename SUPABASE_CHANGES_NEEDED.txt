@@ -1,0 +1,334 @@
+INDYTEER: CHANGES NEEDED NOW (SUPABASE-ONLY ARCHITECTURE)
+=========================================================
+
+Decision: no Node.js API. The React frontend talks directly to Supabase (supabase-js).
+Security and business rules live in Postgres (RLS, SQL functions, triggers), Storage policies,
+and (only where a privileged key is needed) Supabase Edge Functions.
+
+This replaces Sections 1, 3 and 6 of BACKEND_REQUIREMENTS.txt (Node host, REST route list,
+API response/error shape). The schema (Section 2) and business rules (Section 4) still apply.
+"G#" refers to the gap list in BACKEND_REQUIREMENTS.txt.
+
+Priority key:  [P0] blocker / security   [P1] required for the frontend to work
+               [P2] needed before launch   [P3] cleanup / later
+
+
+================================================================================
+A. CURRENT STATE (what exists today)
+================================================================================
+
+- src/lib/supabase.ts          supabase-js client. Throws at import if env vars are missing.
+- src/lib/api/*.ts             14 functions: profiles (2), opportunities (4), applications (5),
+                               posts (4). Nothing in the app imports them yet.
+- src/types/database.ts        Generated Supabase types (UTF-16, which breaks ESLint).
+- src/types/models.ts          Row aliases + joins + CAUSES/NEIGHBORHOODS constants.
+- src/types/model.ts           Re-export of models.ts.
+- supabase/migrations/         Two files. The first is empty; the second holds the schema:
+                               profiles, opportunities, applications, posts + basic RLS.
+- The running app              Still 100% mock (src/store/*, localStorage). It uses
+                               src/types.ts (different types) and does not touch Supabase.
+- package.json                 @supabase/supabase-js installed. "supabase" CLI was added to
+                               dependencies by someone (uncommitted).
+
+
+================================================================================
+B. SECURITY FIXES IN THE EXISTING MIGRATION  [P0]
+================================================================================
+RLS is now the ONLY security layer, so these must be fixed before real users:
+
+B1. profiles: users can update their own account_type (volunteer -> organization).
+    FIX: remove account_type (and id, created_at) from what users can update. Set account_type
+         only through an onboarding RPC that works once (while onboarded = false), or through
+         the signup trigger.
+
+B2. applications: a volunteer can INSERT with status = 'accepted' (no restriction on status).
+    FIX: remove direct INSERT/UPDATE/DELETE on the registrations table for clients. All
+         changes go through RPC functions (section D).
+
+B3. applications: the org UPDATE policy has no WITH CHECK or column limit, so an org could
+    rewrite volunteer_id or opportunity_id.
+    FIX: same as B2 (RPC only), or a trigger that rejects changes to any column except status.
+
+B4. applications INSERT does not check: opportunity open/published, registration deadline,
+    available spots, duplicate after decline/removal.
+    FIX: enforce in the register RPC with a row lock on the opportunity (no overbooking).
+
+B5. opportunities: UPDATE/DELETE policies do not require the caller to be an organization
+    (org_id = auth.uid() is enough, which is fine) but INSERT/UPDATE need column validation
+    (draft vs published completeness, ends after starts, deadline <= date).
+    FIX: CHECK constraints (see section C).
+
+B6. profiles are fully public (select using true), which will expose phone, availability and
+    privacy-controlled fields once they are added.
+    FIX: split public columns from private ones (separate table or a view/RPC). See section C.
+
+B7. Edge-only secrets: the service_role key must never be in the frontend or in VITE_* vars.
+
+
+================================================================================
+C. SCHEMA CHANGES  [P1]  (new migration; match the frontend, or deliberately trim the frontend)
+================================================================================
+
+Housekeeping first
+ C0. Delete the empty migration supabase/migrations/20261107154903_core_schema.sql and keep ONE
+     clean chain (or add new migrations on top of the existing one if it is already applied to
+     a hosted project; check with the team before deleting anything applied remotely).
+
+Signup trigger  [P0]
+ C1. Add a trigger on auth.users that creates the matching row (profiles/accounts) and default
+     user_settings on signup. The existing migration comment mentions this trigger but it does
+     not exist, so a new signup has no profile row and every later insert fails its foreign key.
+
+Accounts / profiles
+ C2. Replace the single profiles table with the frontend's model (see BACKEND_REQUIREMENTS.txt
+     Section 2):
+       accounts            id (= auth.users.id), account_type, onboarded, first_name, last_name,
+                           is_platform_admin, terms_accepted_at
+       volunteer_profiles  headline, avatar_path, city, state, bio, interests[], skills[],
+                           phone, availability
+       organizations       name, logo_path, cover_path, type, description, mission, website,
+                           city, state, contact_email, phone, focus[], verified (admin-only),
+                           founded_year
+     Alternative (smaller change): keep one profiles table and add the missing columns. Either
+     way the frontend fields are missing today (city, state, bio rules, interests, phone,
+     availability, org type, mission, focus, contact email, verified).
+ C3. Restrict who can read private fields (phone, email, availability, hours, history). Expose
+     them through views/RPC that apply the privacy settings (public_profile, show_hours,
+     show_history) and the "org has a registration with this volunteer" rule [G3, G4].
+
+Opportunities
+ C4. Add/rename columns to match the form:
+       category (replaces "cause"), city (replaces "neighborhood"), location (venue name),
+       address, virtual, min_age, skills[], hours numeric(4,1), registration_deadline,
+       recurrence enum (none/weekly/biweekly/monthly), instructions,
+       status enum draft/published (replaces open/closed), spots NOT NULL >= 1.
+ C5. Event time storage (Indiana): store event_date (date) + start_time + end_time (local
+     wall-clock) + timezone ('America/Indiana/Indianapolis' or 'America/Chicago'), and derive
+     starts_at/ends_at (timestamptz) with a trigger. Do not rely on a bare timestamptz alone,
+     because Lake and Vanderburgh counties are Central time.
+ C6. CHECK constraints: published rows must be complete; end_time > start_time; deadline <=
+     event_date; hours > 0; min_age 1-99.
+ C7. Use one shared category list. Today the DB/frontend use different lists
+     (CAUSES/NEIGHBORHOODS in src/types/models.ts vs CATEGORIES/INDIANA_CITIES in
+     src/lib/constants.ts). Pick the frontend's lists and delete the other.
+
+Registrations (replaces "applications")
+ C8. Rename applications -> registrations and change the model:
+       status enum: pending, approved, declined, cancelled, removed
+       attended bool, hours_verified bool, hours numeric(4,1), verified_at, cancelled_at
+       unique (opportunity_id, volunteer_id)
+     Cancel must be a status change (cancelled), not a DELETE, so re-register and history work.
+     Add CHECKs: attended => approved; hours_verified => attended.
+
+New tables the frontend needs
+ C9.  organization_follows (volunteer_id, org_id)
+ C10. saved_opportunities (volunteer_id, opportunity_id)
+ C11. manual_hour_entries (volunteer_id, org_name, title, entry_date <= today, hours 0.5-24,
+      notes)
+ C12. notifications (account_id, type, message, data jsonb, read_at)
+ C13. user_settings (notification toggles + privacy toggles + visibility)
+
+Posts
+ C14. posts: add title and kind (update/announcement), make org-only (platform announcements
+      admin-only), minimum lengths as in the frontend (title >= 3, body >= 10).
+      The existing 2000-char body limit can stay.
+
+Indexes / views
+ C15. Indexes from BACKEND_REQUIREMENTS.txt Section 2 (status/date, org, city, category,
+      GIN on arrays, registration lookups).
+ C16. View/RPC for spots left (opportunity spots minus pending+approved registrations).
+ C17. View volunteer_hour_entries: approved+attended registrations UNION manual entries.
+
+
+================================================================================
+D. DATABASE FUNCTIONS (RPC) AND TRIGGERS  [P1]
+================================================================================
+Called from the frontend with supabase.rpc(). Each runs in a transaction and enforces the
+business rules from BACKEND_REQUIREMENTS.txt Section 4. Clients get NO direct write access to
+registrations.
+
+Registration RPCs
+ D1.  register_for_opportunity(opportunity_id)
+        published, not past, deadline not passed, spots left (lock the opportunity row),
+        no duplicate; re-register after cancel resets to pending; declined/removed blocked.
+        Creates a notification for the org.
+ D2.  cancel_registration(registration_id)       volunteer owner; clears attended/verified.
+ D3.  approve_registration / decline_registration / remove_registration(registration_id)
+        organization owner only; transition rules per the status table; notify volunteer.
+        Approving a declined row re-checks spots.
+ D4.  set_attended(registration_id, attended)    approved only; false clears hours_verified.
+        Decide G5 (block marking attendance before the event date in production).
+ D5.  verify_hours(registration_id, hours) / unverify_hours(registration_id)
+        requires attended; hours 0.5-24; notify volunteer.
+
+Profile / onboarding RPCs
+ D6.  complete_volunteer_onboarding(...) / complete_org_onboarding(...)
+        sets account_type once, creates profile rows, sets onboarded, welcome notification.
+ D7.  get_volunteer_profile_for_org(volunteer_id)
+        applies privacy (public_profile, show_hours, show_history) and the "has registration"
+        rule for contact details.
+
+Stats RPCs / views (replace src/store/selectors.ts logic)
+ D8.  volunteer_dashboard()    totals (total/verified/pending/completed), upcoming count.
+ D9.  org_overview() and org_analytics()
+        total registrations, verified hours, hours to verify, active/completed events,
+        attendance rate, unique and returning volunteers, 6-month charts, top events,
+        registrations by category.
+ D10. org_volunteers(q, sort)  volunteers with approved+attended registrations.
+ D11. feed(scope, category, q, cursor)  merged opportunities + posts, newest first.
+ D12. recommended_opportunities()  (or keep scoring in the client) [G18].
+
+Triggers
+ D13. updated_at on every table with that column.
+ D14. starts_at/ends_at from local date/time/timezone (C5).
+ D15. Notification on publish (to followers with new_opportunity_notifications on),
+      on follow (to org), on registration changes (inside the RPCs).
+ D16. Signup trigger (C1).
+ D17. Block changes to protected columns (account_type, verified, org_id) via trigger or by
+      excluding them from policies.
+
+RLS policy rewrite (after the above)
+ D18. Rebuild policies per table:
+        public read: published opportunities, organizations, posts
+        owner only:  settings, notifications, manual hours, saved, follows (own rows)
+        org owner:   own opportunities (insert/update/delete), own posts
+        registrations: SELECT for the volunteer and the owning org only; NO client writes
+        admin:       verified flag, announcements (is_platform_admin check)
+
+
+================================================================================
+E. STORAGE  [P1/P2]
+================================================================================
+ E1. Create buckets: avatars, org-logos, org-covers, opportunity-images (public read).
+ E2. Storage policies: users may write only inside their own folder (account id as the first
+     path segment); org buckets require an organization account; size and MIME limits
+     (jpeg/png/webp, ~2 MB).
+ E3. Store the object path in the DB (avatar_path, logo_path, cover_path, image_path) and build
+     the public URL in the frontend.
+ E4. supabase/config.toml has no [storage.buckets.*] entries yet; add them there or in a
+     migration so local and hosted environments match.
+
+
+================================================================================
+F. EDGE FUNCTIONS  [P2]  (the only server-side code)
+================================================================================
+Needed only where the service-role key or a schedule is required:
+ F1. delete-account: removes storage objects and the auth user, applies the volunteer
+     anonymize-vs-delete decision [G14], notifies registered volunteers when an org deletes.
+ F2. admin actions: verify organization, platform announcements (or do them with SQL and an
+     is_platform_admin check in RLS).
+ F3. Optional: transactional emails (notification toggles) and event-reminder cron.
+     Only needed if the email toggles must actually send email [G11].
+
+
+================================================================================
+G. FRONTEND CODE CHANGES  [P1]
+================================================================================
+Typing and files
+ G1. Regenerate src/types/database.ts as UTF-8 after the new migrations
+     (e.g. supabase gen types typescript ... then save as UTF-8; PowerShell ">" redirection
+     writes UTF-16 and causes the current "File appears to be binary" ESLint error).
+ G2. Resolve the naming overlap between src/types.ts (the frontend's domain types) and the
+     src/types/ folder (DB types). Suggested: rename the folder (for example src/db/) or merge
+     everything under src/types/ with an index.ts.
+ G3. Remove src/types/model.ts (duplicate re-export) once nothing imports it.
+ G4. Move CAUSES/NEIGHBORHOODS out of types (runtime constants) and delete them in favor of
+     src/lib/constants.ts (CATEGORIES, INDIANA_CITIES) [C7].
+ G5. src/lib/supabase.ts: add a clear startup error screen (or fallback) for missing
+     VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY, and create a local .env from .env.example.
+
+API layer (src/lib/api/*)
+ G6.  Rewrite/extend to cover everything the UI uses. Keep one file per area:
+        auth.ts, profiles.ts, organizations.ts, opportunities.ts, registrations.ts,
+        follows.ts, saved.ts, hours.ts, posts.ts, feed.ts, notifications.ts, settings.ts,
+        analytics.ts, storage.ts
+ G7.  Rename applications.ts -> registrations.ts and use the new RPCs (D1-D5); remove the
+      direct insert/update/delete calls.
+ G8.  Add the missing functions listed in section H.
+ G9.  Add a mapping layer (snake_case rows -> the camelCase types in src/types.ts) so pages
+      keep the same shapes they use today.
+ G10. Standardize errors: API functions throw Error(message); keep user-facing messages
+      (e.g. SPOTS_FULL -> "Sorry, every spot is taken.") by mapping Postgres error codes or
+      custom RPC exceptions.
+
+Replace the mock store
+ G11. Auth: replace login/signup/logout/loginDemo in src/store/actions.ts with supabase.auth.
+      Decide email confirmation behavior [G2]: supabase/config.toml currently has
+      enable_confirmations = false (matches the frontend's "logged in right after signup").
+      Remove the demo buttons and demo credentials for production.
+ G12. Replace src/store/store.ts (localStorage) with a data-fetching layer
+      (React Query or SWR recommended). Pages load their own data; mutations refetch.
+ G13. Replace src/store/selectors.ts computed values with the stats RPCs/views (D8-D12).
+ G14. useSession(): back it with supabase.auth.getSession() + the profile fetch; update the
+      route guards (RouteGuards.tsx) accordingly.
+ G15. Notifications: fetch with polling (30-60 s); Realtime is optional.
+ G16. Images: ImageUpload currently returns a data URL. Change it to upload to Storage and
+      save the path; keep the category-photo / initials fallbacks.
+ G17. Event dates: display date/time exactly as stored (local fields + timezone); stop doing
+      "today" comparisons in the browser (src/lib/utils.ts todayISO usage in selectors).
+ G18. Remove prototype-only pieces: src/data/seed.ts at runtime, "Reset demo data" in
+      Settings, DEMO_* constants.
+ G19. Seed data for dev/staging should move to supabase/seed.sql (with real auth users for the
+      demo accounts). Never run it in production.
+
+Housekeeping
+ G20. Move "supabase" (CLI) from dependencies to devDependencies and commit or revert the
+      uncommitted package.json/package-lock.json changes.
+ G21. Make npm run lint pass (fix database.ts encoding, G1).
+
+
+================================================================================
+H. API FUNCTIONS: EXISTING VS STILL TO BUILD
+================================================================================
+
+H1. ALREADY EXISTS (src/lib/api)  -  needs schema/shape updates, see sections B-D
+    profiles.ts       getProfile, updateProfile
+    opportunities.ts  listOpportunities, getOpportunity, createOpportunity,
+                      listOpportunitiesByOrg
+    applications.ts   applyToOpportunity, listMyApplications, listApplicants,
+                      setApplicationStatus, withdrawApplication
+    posts.ts          listPosts, listPostsByAuthor, createPost, deletePost
+
+H2. STILL TO IMPLEMENT
+    Auth              signUp, signIn, signOut, getSession/onAuthStateChange, resetPassword,
+                      updatePassword, updateEmail, deleteAccount (Edge Function)
+    Onboarding        completeVolunteerOnboarding, completeOrgOnboarding, setAccountType
+    Profiles          updateVolunteerProfile, updateOrgProfile, getVolunteerForOrg (privacy-aware)
+    Organizations     listOrganizations (q, focus, following), getOrganization (with stats)
+    Opportunities     updateOpportunity, deleteOpportunity, publish draft, search with
+                      filters (category, city, date, type, sort) + pagination, spots left,
+                      listMyOpportunities by bucket, getRecommended
+    Registrations     register, cancel, listMyRegistrations (upcoming/past/canceled),
+                      listOrgRegistrations (filters + tab counts), approve, decline, remove,
+                      setAttended, verifyHours, unverifyHours
+    Follows / saved   follow, unfollow, listFollowing, save, unsave, listSaved
+    Hours             listHours (+ summary + monthly), addManualHours, deleteManualHours
+    Feed / posts      getFeed (merged, scope + category + search), createOrgPost,
+                      createAnnouncement (admin)
+    Notifications     listNotifications, markRead, markAllRead
+    Settings          getSettings, updateSettings
+    Dashboards        getVolunteerDashboard, getOrgOverview, getOrgAnalytics, listOrgVolunteers
+    Storage           uploadImage(kind, file) -> path
+    Admin             setOrganizationVerified
+
+
+================================================================================
+I. SUGGESTED ORDER OF WORK
+================================================================================
+ 1. Confirm with the team whether the current migration is already applied to a hosted
+    project (affects C0 and whether new work is a new migration or a rewrite).
+ 2. [P0] Signup trigger (C1) + fix the RLS holes (B1-B7) so nothing insecure ships.
+ 3. [P1] New schema migration (C2-C17), then regenerate database.ts as UTF-8 (G1).
+ 4. [P1] RPC functions and triggers (D1-D17), then rebuild RLS (D18).
+ 5. [P1] Storage buckets and policies (E).
+ 6. [P1] Rewrite src/lib/api/* with the mapping layer (G6-G10).
+ 7. [P1] Swap the frontend over page by page: auth first, then onboarding, opportunities,
+    registrations, hours, org pages, settings (G11-G17). Remove demo/mock code last (G18).
+ 8. [P2] Edge Functions (F), seed.sql (G19), email/reminders if wanted.
+ 9. [P3] Cleanup: types naming, package.json, lint (G2-G4, G20, G21).
+
+DECISIONS THE TEAM STILL NEEDS TO MAKE (from BACKEND_REQUIREMENTS.txt)
+  G1  recurrence model         G2  email confirmation       G3  visibility enforcement
+  G4  org access to profiles   G5  attendance timing        G6  manual-hours verification
+  G8  virtual meeting link     G11 which toggles send mail  G14 delete vs anonymize history
+  Plus: one table (profiles) vs split accounts/volunteer/org tables (C2).
