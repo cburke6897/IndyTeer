@@ -1,5 +1,6 @@
 import { clearVolunteerCache, ctxKey, fetchSnapshot, pickActiveOrg, type SnapshotCtx } from '../data/remote'
 import { getDB, setDB } from './store'
+import { withRetry } from '../lib/retry'
 
 /**
  * Loads the cache from Supabase. Called by SessionBridge whenever the session, the user row, or the
@@ -21,8 +22,14 @@ export async function hydrate(ctx: SnapshotCtx | null): Promise<void> {
   if ((current?.authUser.id ?? null) !== (ctx?.authUser.id ?? null)) clearVolunteerCache()
   current = ctx
   const mine = ++ticket
+  // A new load starts: forget any earlier failure so it cannot flash while this one is in flight.
+  setDB((d) => (d.loadError ? { ...d, loadError: null } : d))
   try {
-    const snapshot = await fetchSnapshot(ctx, ctx ? getActiveOrgPreference(ctx.authUser.id) : null)
+    // Retried quietly (see withRetry); the loading screen stays up and an error only shows if every try fails.
+    const snapshot = await withRetry(
+      () => fetchSnapshot(ctx, ctx ? getActiveOrgPreference(ctx.authUser.id) : null),
+      { shouldStop: () => mine !== ticket },
+    )
     if (mine !== ticket) return
     setDB((d) => ({
       ...d, ...snapshot,
