@@ -1,7 +1,7 @@
 /* Shared palette and typography come from the frontend branch's index.css. */
 * { box-sizing: border-box; }
 body { min-width: 320px; min-height: 100vh; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 #root { min-height: 100vh; }
 .brand { display: inline-flex; align-items: center; text-decoration: none; }
 .home-shell, .profile-shell { min-height: 100vh; max-width: 1200px; margin: 0 auto; padding: 0 32px; }
@@ -39,8 +39,8 @@ button, input { font: inherit; }
 .auth-subtitle { margin: 0 0 28px; }
 .auth-form { display: grid; gap: 18px; }
 .auth-form label { color: var(--color-ink); display: grid; font-size: 13px; font-weight: 600; gap: 7px; }
-.auth-form input { width: 100%; height: 44px; border: 1px solid var(--color-line-strong); border-radius: 6px; background: white; color: var(--color-ink); padding: 0 12px; }
-.auth-form input:focus { outline: 2px solid var(--color-navy-200); outline-offset: 1px; border-color: var(--color-navy-700); }
+.auth-form input, .auth-form select { width: 100%; height: 44px; border: 1px solid var(--color-line-strong); border-radius: 6px; background: white; color: var(--color-ink); padding: 0 12px; }
+.auth-form input:focus, .auth-form select:focus { outline: 2px solid var(--color-navy-200); outline-offset: 1px; border-color: var(--color-navy-700); }
 .field-hint { color: var(--color-muted); font-size: 12px; font-weight: 400; }
 .auth-form .primary-button { margin-top: 4px; width: 100%; }
 .switch-auth { color: var(--color-muted); font-size: 14px; margin: 24px 0 0; text-align: center; }

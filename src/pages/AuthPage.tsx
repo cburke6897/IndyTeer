@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { AuthLayout } from '../components/layout/AuthLayout'
+import type { AccountType } from '../types/models'
 
 type AuthPageProps = { mode: 'login' | 'signup' }
 
@@ -22,6 +23,7 @@ export function AuthPage({ mode }: AuthPageProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
+  const [accountType, setAccountType] = useState<AccountType | ''>('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
@@ -38,7 +40,8 @@ export function AuthPage({ mode }: AuthPageProps) {
 
     try {
       if (isSignup) {
-        const result = await signUp(email, password, displayName)
+        if (!accountType) throw new Error('Choose an account type.')
+        const result = await signUp(email, password, displayName, accountType)
         if (result.needsEmailConfirmation) {
           setMessage('Check your email to confirm your account, then come back to log in.')
         } else {
@@ -64,6 +67,21 @@ export function AuthPage({ mode }: AuthPageProps) {
     >
 
         <form className="auth-form" onSubmit={handleSubmit}>
+          {isSignup && (
+            <label>
+              Account type
+              <select
+                name="accountType"
+                required
+                value={accountType}
+                onChange={(event) => setAccountType(event.target.value as AccountType | '')}
+              >
+                <option value="">Choose an account type</option>
+                <option value="volunteer">Volunteer</option>
+                <option value="organization">Organization</option>
+              </select>
+            </label>
+          )}
           {isSignup && (
             <label>
               Name

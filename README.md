@@ -1,45 +1,46 @@
 # IndyTeer Auth and Media
 
-This Vite and React implementation covers the Auth & Media Lead assignment: email signup, login, persistent sessions, a protected profile route, and avatar upload to Supabase Storage. It uses the current starter app as a working demonstration; connect the protected route and avatar component to the team's opportunity pages when those routes are added.
+React and Vite implementation of email signup/login, persistent Supabase sessions, protected profile access, and avatar uploads. The full frontend can reuse the services with its own layouts and routes.
 
-## Run the app
+## Team contract
 
-1. In Supabase, create a project and copy its Project URL and **publishable** API key.
-2. Copy `.env.example` to `.env.local` and replace both example values. Use `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, matching the backend configuration. The latter holds the browser-safe publishable key; the previous `VITE_SUPABASE_PUBLISHABLE_KEY` name remains a fallback. Keep `.env.local` out of Git. A publishable key is expected in browser code; never put a `service_role` or secret key in any `VITE_` variable.
-3. In Supabase **Authentication → URL Configuration**, set the Site URL to `http://localhost:5173` and add `http://localhost:5173/**` to the redirect URL allow list. Add the deployed app's HTTPS origin there before deploying.
-4. In **Authentication → Sign In / Providers**, enable Email and leave email confirmation on for the PKCE signup flow. Signup shows a confirmation message; the user logs in after following the link. The confirmation redirect must be allow-listed.
-5. Run `supabase/migrations/20261107000100_auth_media.sql` in the Supabase SQL Editor. This creates the public `avatars` bucket with a 5 MB limit and JPEG/PNG/WebP restrictions, then limits upload and replacement to each user's own folder.
-6. Run `npm install`, then `npm run dev` and open the local Vite URL.
+- Users choose volunteer or organization during signup. Auth signup metadata contains full_name and account_type; the signup service rejects missing or invalid account types before making a request.
+- The backend teammate owns schema, profile creation trigger, backfill, RLS, and Storage SQL migrations. Auth and Media owns signup and upload flows. Do not apply or modify database migrations independently as part of frontend setup.
+- profiles.id equals the Auth user ID. Display names come from profiles.full_name and avatars from profiles.avatar_url.
+- uploadAvatar validates the signed-in Auth user, uploads to avatars/<Auth user ID>/avatar, then saves the URL through updateProfile. It reports success only after the profile update succeeds. No avatar fields are written to Auth metadata.
 
-The `AuthProvider` reads the saved Supabase session on startup and follows sign-in and sign-out events. The client explicitly enables PKCE, session persistence, URL callback detection, and token refresh. `RequireAuth` waits for that session check before redirecting unauthenticated visitors to `/login`.
+## Local setup
 
-## Included routes and components
+1. Run npm ci.
+2. Copy .env.example to .env.local. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY. The latter holds the browser-safe publishable key, matching the backend variable name. VITE_SUPABASE_PUBLISHABLE_KEY remains a compatibility fallback. Never use secret or service-role keys in VITE variables.
+3. Coordinate with the backend teammate to confirm the signup trigger, existing-user backfill, and avatars bucket policies are deployed. The client does not create a missing profile row.
+4. Configure the local auth Site URL as http://127.0.0.1:5173 and allow http://127.0.0.1:5173/** as a redirect URL. Leave email confirmation enabled for PKCE signup. Add the production HTTPS origin before deployment.
+5. Run npm run dev and open the URL printed by Vite.
 
-- `/signup` and `/login`: email/password forms, display name metadata, and email confirmation handling.
-- `/profile`: protected demo route with current account details, logout, and avatar uploader.
-- `src/auth/AuthProvider.tsx`: shared session state and auth actions.
-- `src/routes/RequireAuth.tsx`: React Router guard. It protects page display only; it is not an API security boundary.
-- `src/media/avatarService.ts`: image validation, per-user upload/replace, and avatar URL saved in the user's editable auth metadata.
-- `supabase/migrations/20261107000100_auth_media.sql`: bucket configuration and Storage row-level security policies.
+.env.local is ignored by Git. AuthProvider restores the stored session, detects auth callbacks, refreshes tokens, and follows auth changes. RequireAuth waits for session loading before redirecting a signed-out visitor.
 
-To use the guard for an existing route, nest its route under `<Route element={<RequireAuth />}>` in `src/App.tsx`. Use `useAuth()` in page components to read `user`, `session`, and `loading`, or to call `signIn`, `signUp`, and `signOut`. Add `<AvatarUploader />` to the signed-in profile screen.
+## Routes and services
 
-## Security notes
+- /signup: full name, account-type selection, email, password, and confirmation feedback.
+- /login: real Supabase email/password login.
+- /profile: profile loaded by Auth ID, database display name and avatar, upload/replace, and logout.
+- src/auth/useAuth.ts: user, session, loading, signUp, signIn, and signOut.
+- src/auth/useProfile.ts: loads the database profile and updates the local profile cache after upload.
+- src/media/avatarService.ts: File validation, own-folder upload, and profiles.avatar_url persistence.
+- src/lib/api/profiles.ts: shared backend profile access methods.
 
-- The `avatars` bucket is public so profile photos can render without signed URLs. Anyone who has an avatar URL can view that image. Uploads and replacements still require a signed-in user and Storage RLS restricts each object to a path beginning with that user's Auth ID.
-- The client rejects unsupported types and files over 5 MB. The bucket repeats these restrictions on the server.
-- `user_metadata` is user-editable. The included code stores only display name and avatar fields there; do not use it to authorize volunteer/organization roles.
-- A React route guard only controls what the browser displays. If the team adds an Express API, verify the Supabase access token on every protected API request and enforce authorization on the server. Never trust a role or user ID supplied only by the browser.
-- This branch now includes the backend Supabase data access layer and profiles schema from main. Its standalone auth pages still save avatars in Auth metadata. The complete frontend should also save the returned URL through `updateProfile({ avatar_url })`; the profiles row must exist first. Profile creation and onboarding contracts still need to be completed by the backend. See `docs/AUTH_MEDIA_INTEGRATION.md` for integration examples.
+See docs/AUTH_MEDIA_INTEGRATION.md for exact service signatures and frontend integration steps. Existing SQL files remain versioned; the backend owner controls their application and migration history.
 
-## Tests and checks
+## Security and error handling
 
-Run:
+The current avatars bucket is public: anyone with an image URL can view it. Storage ownership policies enforce authenticated writes to the user's own folder. Client validation accepts JPEG, PNG, and WebP up to 5 MiB; the backend owner must maintain equivalent bucket restrictions.
 
-```sh
-npm test
-npm run build
-npm run lint
-```
+Signup metadata is input for the backend trigger, not a trusted source of authorization. Use the saved profile and database RLS for role/ownership checks. A browser route guard controls page access only; any separate API must verify the user's access token.
 
-The tests cover the auth form flows, client session-persistence configuration, signup/login/logout requests, session hydration and auth events, route protection, and avatar validation/upload behavior.
+Profile-loading and profile-update failures are shown as errors. Storage upload and profile update are separate operations; if the profile write fails, the file may already have been replaced, and the client reports failure rather than claiming it was saved.
+
+## Validation
+
+Run npm test, npm run build, and npm run lint. Tests cover account-type metadata, signup/login flows, session state, route protection, the database profile contract, avatar ownership, and persistence failures.
+
+Live acceptance flow: register each account type, confirm the email, verify profiles.id matches Auth user ID and account_type is correct, upload an avatar, reload to verify database persistence, and sign out. The backend teammate supplies schema/trigger/Storage readiness for these checks.

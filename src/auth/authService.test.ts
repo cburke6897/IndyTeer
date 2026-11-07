@@ -23,16 +23,16 @@ describe('email auth actions', () => {
     vi.clearAllMocks()
   })
 
-  it('signs up with normalized email, display name, and app redirect', async () => {
+  it.each(['volunteer', 'organization'] as const)('sends the required %s account type and full name to the trigger', async (accountType) => {
     signUpMock.mockResolvedValue({ data: { session: null }, error: null })
 
-    const result = await signUpWithEmail(' volunteer@example.org ', 'good-password', ' Kai ')
+    const result = await signUpWithEmail(' volunteer@example.org ', 'good-password', ' Kai ', accountType)
 
     expect(signUpMock).toHaveBeenCalledWith({
       email: 'volunteer@example.org',
       password: 'good-password',
       options: {
-        data: { full_name: 'Kai', display_name: 'Kai' },
+        data: { full_name: 'Kai', account_type: accountType },
         emailRedirectTo: window.location.origin,
       },
     })
@@ -41,8 +41,14 @@ describe('email auth actions', () => {
 
   it('reports an immediate signup session when email confirmation is disabled', async () => {
     signUpMock.mockResolvedValue({ data: { session: { access_token: 'token' } }, error: null })
-    await expect(signUpWithEmail('kai@example.org', 'good-password', 'Kai'))
+    await expect(signUpWithEmail('kai@example.org', 'good-password', 'Kai', 'volunteer'))
       .resolves.toEqual({ needsEmailConfirmation: false })
+  })
+
+  it.each([undefined, '', 'admin'])('rejects an invalid account type (%s) before calling Supabase', async (value) => {
+    await expect(signUpWithEmail('kai@example.org', 'good-password', 'Kai', value as 'volunteer'))
+      .rejects.toThrow('Choose volunteer or organization')
+    expect(signUpMock).not.toHaveBeenCalled()
   })
 
   it('signs in and trims the email', async () => {

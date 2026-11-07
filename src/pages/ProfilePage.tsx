@@ -2,14 +2,12 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { AvatarUploader } from './AvatarUploader'
 import { Logo } from '../components/ui/Logo'
+import { useProfile } from '../auth/useProfile'
 
 export function ProfilePage() {
   const { user, signOut } = useAuth()
   const navigate = useNavigate()
-  const metadataName = user?.user_metadata?.full_name ?? user?.user_metadata?.display_name
-  const name = typeof metadataName === 'string'
-    ? metadataName
-    : 'Volunteer'
+  const { profile, loading, error, setProfile } = useProfile(user?.id)
 
   async function handleSignOut() {
     await signOut()
@@ -24,9 +22,11 @@ export function ProfilePage() {
       </header>
       <section className="profile-card">
         <p className="eyebrow">Your account</p>
-        <h1>Hi, {name}</h1>
+        <h1>{profile ? `Hi, ${profile.full_name || 'there'}` : 'Your profile'}</h1>
         <p className="muted">{user?.email}</p>
-        <AvatarUploader />
+        {loading && <p role="status">Loading your profile…</p>}
+        {error && <p className="notice error" role="alert">Could not load your profile: {error}</p>}
+        {profile && <AvatarUploader key={profile.id} profile={profile} onUploaded={setProfile} />}
         <p className="profile-note">Your account is ready. The opportunities and registrations pages can be connected here.</p>
       </section>
     </main>

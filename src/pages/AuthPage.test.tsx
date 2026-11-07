@@ -35,7 +35,7 @@ describe('AuthPage', () => {
     expect(await screen.findByText('opportunities page')).toBeInTheDocument()
   })
 
-  it('shows the email-confirmation message after signup when Supabase returns no session', async () => {
+  it.each(['volunteer', 'organization'])('submits the selected %s account type and waits for confirmation', async (accountType) => {
     signUp.mockResolvedValue({ needsEmailConfirmation: true })
     render(
       <MemoryRouter initialEntries={['/signup']}>
@@ -44,11 +44,12 @@ describe('AuthPage', () => {
     )
 
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Kai Volunteer' } })
+    fireEvent.change(screen.getByLabelText('Account type'), { target: { value: accountType } })
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'kai@example.org' } })
     fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: 'test-password' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
 
-    await waitFor(() => expect(signUp).toHaveBeenCalledWith('kai@example.org', 'test-password', 'Kai Volunteer'))
+    await waitFor(() => expect(signUp).toHaveBeenCalledWith('kai@example.org', 'test-password', 'Kai Volunteer', accountType))
     expect(await screen.findByRole('status')).toHaveTextContent('Check your email to confirm your account')
   })
 })
