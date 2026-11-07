@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+// These tests exercise row mapping, not the configured project's API.
+vi.mock('../lib/api/client', () => ({
+  db: { storage: { from: (bucket: string) => ({
+    getPublicUrl: (path: string) => ({ data: { publicUrl: `https://storage.example.test/${bucket}/${path}` } }),
+  }) } },
+}))
 import { colorFor, ctxKey, deriveUser, mapNotification, mapOpportunity, mapSharedVolunteer, pickActiveOrg, staffOrgIdsOf } from './remote'
 import { emptyDB } from '../store/store'
 import { homePathFor, memberRole, sessionOrg, sessionVolunteer, staffOrgIds, staffOrgs } from '../store/selectors'
