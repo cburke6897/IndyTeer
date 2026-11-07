@@ -1,4 +1,6 @@
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2.119.0'
+import type { Database } from '../_shared/database.ts'
+type ServerClient = ReturnType<typeof createClient<Database>>
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -17,7 +19,7 @@ function makeClientKeys() {
 }
 
 async function removeFolderTree(
-  admin: ReturnType<typeof createClient>,
+  admin: ServerClient,
   bucket: string,
   folder: string,
 ) {
@@ -59,13 +61,13 @@ Deno.serve(async (request) => {
 
     const token = authorization.slice('Bearer '.length)
     const { url, adminKey, publicKey } = makeClientKeys()
-    const caller = createClient(url, publicKey, { global: { headers: { Authorization: authorization } } })
+    const caller = createClient<Database>(url, publicKey, { global: { headers: { Authorization: authorization } } })
     const { data: { user }, error: authError } = await caller.auth.getUser(token)
     if (authError || !user) {
       return Response.json({ error: 'Your session could not be verified.' }, { status: 401, headers: corsHeaders })
     }
 
-    const admin = createClient(url, adminKey, { auth: { persistSession: false, autoRefreshToken: false } })
+    const admin = createClient<Database>(url, adminKey, { auth: { persistSession: false, autoRefreshToken: false } })
     const { data: membership, error: membershipError } = await admin.from('organization_memberships')
       .select('organization_id').eq('organization_id', organizationId).eq('user_id', user.id)
       .eq('role', 'owner').eq('status', 'active').maybeSingle()

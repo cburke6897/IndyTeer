@@ -5,10 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/check-public-env.mjs && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:db": "node --test scripts/stabilization.test.mjs",
+    "types:generate": "node scripts/generate-types.mjs",
+    "check:edge": "npm exec --yes --package=deno -- deno check supabase/functions/delete-account/index.ts supabase/functions/delete-organization/index.ts",
+    "check": "npm run lint && npm test && npm run test:db && npm run test:config && npm run build",
+    "test:config": "node --test scripts/config.test.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
@@ -21,7 +26,9 @@
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
+    "@electric-sql/pglite": "^0.5.15",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
     "@rolldown/plugin-babel": "^0.3.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",

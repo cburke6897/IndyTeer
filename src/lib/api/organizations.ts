@@ -1,5 +1,4 @@
 import { db } from './client'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Organization, OrganizationMembership, OrganizationRole, PublicOrganization } from '../../types/models'
 
 export type OrganizationFilters = { q?: string; city?: string; focus?: string }
@@ -113,9 +112,7 @@ export async function transferOrganizationOwnership(
   organizationId: string,
   newOwnerId: string,
 ): Promise<OrganizationMembership> {
-  // The generated database types are refreshed once the ownership migration is deployed.
-  const rpc = (db as unknown as SupabaseClient).rpc
-  const { data, error } = await rpc('transfer_organization_ownership', {
+  const { data, error } = await db.rpc('transfer_organization_ownership', {
     p_organization_id: organizationId,
     p_new_owner_id: newOwnerId,
   })
