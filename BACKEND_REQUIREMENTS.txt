@@ -1,0 +1,861 @@
+INDYTEER BACKEND REQUIREMENTS
+=============================
+
+Based on the frontend source (src/types.ts, src/store/actions.ts, src/store/selectors.ts, src/pages/, src/components/domain/).
+Planning only: no backend code, migrations or installs are included.
+Frontend/backend gaps are listed in Section 0 and cross-referenced as [G#] throughout.
+
+CONTENTS
+  0. Gaps and assumptions
+  1. Required services
+  2. Database schema
+  3. API endpoint inventory
+  4. Business rules
+  5. Authorization and security
+  6. Frontend integration notes
+  7. Build checklist
+
+
+================================================================================
+0. GAPS AND ASSUMPTIONS
+================================================================================
+
+G1  Recurrence is a single date plus an enum (none/weekly/biweekly/monthly). There are no
+    occurrences, and registrations attach to the opportunity, not to a date. Recurring
+    opportunities never count as "past".
+    DECISION: keep this model for v1 (recommended), or add an occurrences table later.
+
+G2  Email confirmation. The frontend assumes you are logged in right after signup. Supabase's
+    "confirm email" setting would break that.
+    DECISION: disable it for v1, or add a "check your email" screen.
+
+G3  "visibility" (everyone / members / organizations) is stored in settings but nothing in the UI
+    enforces it. Only publicProfile, showHours and showHistory are enforced, and only on the
+    org-viewing-volunteer page. Orgs also have a "public page" toggle that is not enforced.
+    DECISION: define enforcement, or drop the fields.
+
+G4  Any org can currently open any volunteer profile by ID and see their email and phone.
+    DECISION: restrict to volunteers who have a registration with that org.
+
+G5  Org can mark "attended" before the event date (a demo convenience).
+    DECISION: enforce event_date <= today in production.
+
+G6  Manual hours stay pending forever. No UI exists for anyone to verify them.
+    DECISION: accept this, or add an org-claim flow later.
+
+G7  Org "verified" badge and platform announcements have no UI. Seed data sets them directly.
+    DECISION: admin-only, done via SQL or a small admin endpoint.
+
+G8  Virtual events have no meeting-link field. The form stores "Online / Link sent after
+    registration".
+    DECISION: add an optional meeting_url shown only to approved registrants, or leave it.
+
+G9  Editing or deleting an opportunity does not notify registrants. Delete cascades
+    registrations. Spots can be lowered below the current registered count.
+    DECISION: add rules (see Section 4).
+
+G10 One admin user per organization. There are no teams or multiple admins.
+    DECISION: assume single owner.
+
+G11 Notification toggles are stored, but only newOpportunities is honored (when an org
+    publishes). Email delivery, reminders, orgUpdates and confirmations do nothing today.
+    DECISION: decide which toggles drive real emails.
+
+G12 Volunteer name is duplicated on the user and the profile. Org admin name is only on the user.
+    DECISION: store names once (see Section 2, accounts table).
+
+G13 Notifications carry a frontend route ("link") instead of structured data.
+    DECISION: store type plus IDs and let the frontend build the route.
+
+G14 Account deletion currently deletes everything. For volunteers, this removes the org's
+    historical attendance and verified-hours records.
+    DECISION: cascade, or anonymize registrations (recommended: anonymize).
+
+G15 The landing page reads featured opportunities from the store, so it is public.
+    DECISION: needs a public read endpoint, or static content.
+
+G16 Marketing stats ("12,400+ hours", "180 orgs") are hard-coded.
+    DECISION: static, or an optional public stats endpoint.
+
+G17 Frontend has no waitlist, no registrant messaging, no post edit or delete, no org-to-volunteer
+    invitations. Not required.
+
+G18 Recommendations are scored client-side (interest match +2, followed org +1, skill match +1).
+    DECISION: endpoint or client-side.
+
+
+================================================================================
+1. REQUIRED SERVICES
+================================================================================
+
+SERVICE: Node.js API host (Render, Railway, Fly, or similar container host)   [REQUIRED]
+  Owns all business rules and data access. Fastify or Express with TypeScript and Zod. Use the
+  same Zod schemas for request validation as the frontend forms (recommendation, not requirement).
+
+SERVICE: Static frontend host (Vercel, Netlify or Cloudflare Pages)   [REQUIRED]
+  Serves the Vite build. Needs a SPA fallback to index.html because the app uses BrowserRouter.
+
+SERVICE: Supabase Postgres   [REQUIRED]
+  All tables in Section 2.
+
+SERVICE: Supabase Auth   [REQUIRED]
+  Email/password signup, login, password reset, email change, JWT issuance. Replaces the mock
+  login and signup().
+
+SERVICE: Supabase Storage   [REQUIRED]
+  Four buckets: avatars, org-logos, org-covers, opportunity-images. Replaces data-URL previews.
+
+SERVICE: Transactional email (Resend, Postmark or SES), set up as Supabase custom SMTP
+  REQUIRED for auth mail: the default Supabase mailer is heavily rate-limited, so auth emails
+  need custom SMTP for production.
+  OPTIONAL for notification emails: only needed if the toggles are meant to work [G11].
+
+SERVICE: Scheduler (pg_cron or a Node cron job)   [OPTIONAL]
+  Event reminders (day before) and cleanup. Tied to [G11].
+
+SERVICE: Error and log monitoring (Sentry or similar)   [OPTIONAL]
+
+SUPABASE PIECES NEEDED: Postgres, Auth and Storage. Realtime and Edge Functions are NOT needed
+(notifications can be polled).
+
+SHOULD THE NODE API OWN ALL DATA ACCESS? Yes. Reasons:
+  - Registration, approval and verification need transactions and row locks. Use a direct
+    Postgres connection (pooler) from the API with a library such as postgres.js, Drizzle or
+    Kysely. supabase-js cannot run multi-statement transactions.
+  - Rules like privacy, ownership and spot counts live in one place.
+  - Enable RLS on every table with no policies for anon or authenticated, as defense in depth,
+    so direct client access is impossible.
+  - The service-role key lives only on the API server.
+
+AUTH SPLIT: the frontend calls supabase-js directly for signup, login, logout, password reset and
+password change. The Node API verifies the JWT on every request.
+
+NOT NEEDED: payments, SMS, maps or geocoding (location is plain text plus a city filter), a search
+engine (Postgres ILIKE or tsvector is enough), websockets.
+
+PROTOTYPE VS PRODUCTION
+  Prototype today                          Production
+  ---------------------------------------  ------------------------------------------
+  localStorage DB                          Postgres
+  Mock login() and DEMO_PASSWORD           Supabase Auth
+  Data-URL images in state                 Storage objects
+  Derived stats in the browser             Computed in SQL
+  Notifications created in the browser     Created in API transactions
+
+
+================================================================================
+2. DATABASE SCHEMA
+================================================================================
+
+All tables use uuid primary keys (gen_random_uuid()), created_at timestamptz default now(), and
+updated_at.
+
+ENUMS
+  account_type : volunteer, organization
+  opp_status   : draft, published
+  recurrence   : none, weekly, biweekly, monthly
+  reg_status   : pending, approved, declined, cancelled, removed
+  org_type     : Nonprofit, Business, School or University, Community Organization,
+                 Faith-Based Organization, Government Agency
+  availability : Weekday mornings, Weekday evenings, Weekends, Flexible, One-time events only
+  visibility   : everyone, members, organizations
+  post_kind    : update, announcement
+  notif_type   : see the notifications table below
+
+Categories and skills are validated against one shared constants list. Store them as text and
+text[], NOT as DB enums or extra tables.
+
+--------------------------------------------------------------------------------
+TABLE accounts   (extends auth.users; email lives in auth.users and is not duplicated)
+--------------------------------------------------------------------------------
+  id                  uuid PK        FK auth.users(id) on delete cascade
+  account_type        account_type   null until chosen. Immutable once onboarded.
+  onboarded           bool           default false
+  first_name          text           not null. Single source of truth for names [G12].
+  last_name           text           not null
+  is_platform_admin   bool           default false
+  terms_accepted_at   timestamptz    set at signup
+
+--------------------------------------------------------------------------------
+TABLE volunteer_profiles
+--------------------------------------------------------------------------------
+  id             uuid PK
+  account_id     uuid          unique, FK accounts on delete cascade
+  headline       text          <= 80 chars, default 'New IndyTeer volunteer'
+  avatar_path    text          null
+  city           text          not null
+  state          char(2)       default 'IN'
+  bio            text          20-400 chars
+  interests      text[]        at least 1 item, each must be in the categories list
+  skills         text[]        default {}
+  phone          text          null. Format check: >= 7 chars of digits and punctuation.
+  availability   availability  null
+  (joined_at is created_at)
+  Index: GIN on interests.
+
+--------------------------------------------------------------------------------
+TABLE organizations
+--------------------------------------------------------------------------------
+  id              uuid PK
+  account_id      uuid       unique, FK accounts on delete cascade (single owner [G10])
+  name            text       not null
+  logo_path       text       null
+  cover_path      text       null
+  type            org_type   not null
+  description     text       >= 30 chars
+  mission         text       >= 10 chars
+  website         text       null, normalized to https
+  city            text       not null
+  state           char(2)    default 'IN'
+  contact_email   text       not null
+  phone           text       null
+  focus           text[]     at least 1 item
+  verified        bool       default false. ADMIN-ONLY.
+  founded_year    int        default current year
+  Indexes: GIN on focus; lower(name) trigram or tsvector for search.
+  Not stored: color (placeholder logo color is derived from the id in the UI) and followerBoost
+  (seed-only).
+
+--------------------------------------------------------------------------------
+TABLE opportunities
+--------------------------------------------------------------------------------
+  id                     uuid PK
+  org_id                 uuid        FK organizations on delete cascade, not null
+  status                 opp_status  default 'draft'
+  title                  text        not null, >= 5 chars
+  description            text        null while draft, >= 20 chars to publish
+  category               text        null while draft
+  image_path             text        null (UI falls back to a category photo)
+  event_date             date        local date (see time handling below)
+  start_time, end_time   time        local wall-clock, end > start
+  timezone               text        'America/Indiana/Indianapolis' or 'America/Chicago',
+                                     default Eastern
+  starts_at, ends_at     timestamptz trigger-maintained from the three fields above
+  virtual                bool        default false
+  location               text        venue name. Required if not virtual.
+  address                text        required if not virtual
+  city                   text        not null
+  spots                  int         >= 1
+  min_age                int         null, 1-99
+  skills                 text[]      default {}
+  hours                  numeric(4,1) > 0
+  registration_deadline  date        <= event_date
+  recurrence             recurrence  default 'none'
+  instructions           text        null
+
+  A CHECK constraint enforces that when status = 'published', all required fields above are
+  present. Drafts only require title (the frontend fills defaults) [G1].
+  Indexes: (status, event_date); (org_id, status); (city); (category); GIN on skills;
+  text-search index on title/description.
+
+  TIME HANDLING (INDIANA)
+  Most of Indiana is Eastern, but several counties are Central, including Lake (Gary) and
+  Vanderburgh (Evansville), which the seed data uses.
+    - Store the event as: local date + local start time + local end time + IANA timezone.
+      Never store it as a bare UTC instant.
+    - Derive starts_at / ends_at with (event_date + start_time) AT TIME ZONE timezone, for
+      sorting and "is it past" checks.
+    - Return the local fields plus the timezone to the frontend, which should format them as
+      written and not convert to the viewer's zone.
+    - The registration deadline is inclusive through 23:59:59 of that date in the event's
+      timezone.
+    - Default the timezone from the city: Eastern, except a short list of Central-zone cities,
+      and let the org override it.
+
+--------------------------------------------------------------------------------
+TABLE registrations
+--------------------------------------------------------------------------------
+  id               uuid PK
+  opportunity_id   uuid         FK opportunities on delete cascade
+  volunteer_id     uuid         FK volunteer_profiles on delete cascade
+                                (or set null + anonymize, [G14])
+  status           reg_status   default 'pending'
+  attended         bool         default false
+  hours_verified   bool         default false
+  hours            numeric(4,1) snapshot of opportunity.hours at registration. Org may change it
+                                when verifying (0.5-24).
+  verified_at      timestamptz  null
+  cancelled_at     timestamptz  null
+
+  Unique: (opportunity_id, volunteer_id). Re-registering after a cancel reuses the same row.
+  Checks: attended => status = 'approved'; hours_verified => attended.
+  Indexes: (opportunity_id, status); (volunteer_id, status).
+
+  STATUS TRANSITIONS (as implemented in the frontend)
+    (none)              -> pending               volunteer   register
+    cancelled           -> pending               volunteer   register again
+    pending             -> approved / declined   org
+    declined            -> approved              org         ("Approve instead")
+    pending or approved -> cancelled             volunteer   clears attended and verified
+    approved            -> removed               org         clears attended and verified
+    declined or removed -> anything              (nobody)    volunteer cannot re-register
+
+--------------------------------------------------------------------------------
+TABLE manual_hour_entries
+--------------------------------------------------------------------------------
+  id            uuid PK
+  volunteer_id  uuid          FK volunteer_profiles on delete cascade
+  org_name      text          not null (free text)
+  title         text          not null
+  entry_date    date          not null, <= today
+  hours         numeric(4,1)  0.5-24
+  notes         text          null
+  Always pending [G6].
+
+  EVENT HOURS ARE NOT A SEPARATE TABLE. They are rows in registrations where
+  status = 'approved' AND attended. Expose them through a view (volunteer_hour_entries) that
+  unions the two sources into the frontend's HourEntry shape.
+
+--------------------------------------------------------------------------------
+TABLE organization_follows
+--------------------------------------------------------------------------------
+  PK (volunteer_id, org_id), both FK on delete cascade, plus created_at. Index on org_id.
+
+--------------------------------------------------------------------------------
+TABLE saved_opportunities
+--------------------------------------------------------------------------------
+  PK (volunteer_id, opportunity_id), both FK on delete cascade, plus created_at.
+
+--------------------------------------------------------------------------------
+TABLE posts
+--------------------------------------------------------------------------------
+  id          uuid PK
+  org_id      uuid       null = platform announcement. FK organizations on delete cascade.
+  kind        post_kind  'announcement' if and only if org_id is null
+  title       text       >= 3 chars
+  body        text       >= 10 chars
+  image_path  text       null
+
+--------------------------------------------------------------------------------
+TABLE notifications
+--------------------------------------------------------------------------------
+  id          uuid PK
+  account_id  uuid         recipient, FK accounts on delete cascade
+  type        notif_type
+  message     text         rendered at creation
+  data        jsonb        {opportunity_id, registration_id, org_id, volunteer_id}
+  read_at     timestamptz  null = unread
+  Index: (account_id, created_at desc).
+
+  notif_type values used by the frontend:
+    welcome
+    registration_received          (to org)
+    registration_cancelled         (to org)
+    registration_status_changed    (to volunteer: approved, declined or removed)
+    hours_verified
+    new_follower
+    new_opportunity                (to followers)
+
+--------------------------------------------------------------------------------
+TABLE user_settings   (PK/FK account_id; created with defaults at signup)
+--------------------------------------------------------------------------------
+  email_notifications             bool        default true
+  event_reminders                 bool        default true
+  new_opportunity_notifications   bool        default true
+  org_updates                     bool        default false
+  registration_confirmations      bool        default true
+  public_profile                  bool        default true
+  show_hours                      bool        default true
+  show_history                    bool        default true
+  visibility                      visibility  default 'everyone'
+
+--------------------------------------------------------------------------------
+CALCULATED, NOT STORED
+--------------------------------------------------------------------------------
+  - Spots left and registered counts
+  - Follower count (the seed followerBoost is not a real field)
+  - Active-opportunity count per org
+  - Bucket (active / upcoming / completed / draft)
+  - All hour totals and the unified hour-entry list
+  - Badges (First Steps, Regular, 10/25/100 Hour Club, Well Rounded, Connector)
+  - Org stats and analytics
+  - Recommendations
+  - Unread notification count
+  - "Past" status, derived from starts_at and recurrence
+
+
+================================================================================
+3. API ENDPOINT INVENTORY
+================================================================================
+
+Base path: /api/v1. All endpoints need a valid Supabase JWT unless marked PUBLIC.
+Caller key:  V = volunteer account,  O = organization account,  A = platform admin.
+
+--------------------------------------------------------------------------------
+AUTH AND ONBOARDING
+--------------------------------------------------------------------------------
+Signup, login, logout, forgot-password, change-password and email-change go through supabase-js
+directly (Supabase Auth). These are NOT Node endpoints.
+
+GET /me                                  [any session]
+    Returns account (name, email, accountType, onboarded), profile (volunteer or org), and
+    settings. Replaces useSession.
+
+POST /me/signup-complete                 [any session]
+    Called after Supabase signup. Creates the accounts row (first/last name, terms_accepted_at)
+    and default user_settings. Rejects if terms not accepted.
+
+PUT /me/account-type {type}              [any session]
+    Allowed only while onboarded = false.
+
+POST /onboarding/volunteer               [session with type volunteer]
+    Body: firstName, lastName, avatarPath?, city, bio, interests[], skills[], phone?,
+    availability?. Creates the profile, sets onboarded, adds the welcome notification.
+    Validation mirrors the frontend.
+
+POST /onboarding/organization            [session with type organization]
+    Body: name, logoPath?, type, city, description, mission, focus[], website?, email, phone?.
+
+PATCH /me {firstName, lastName}          [any]
+    Email changes go through Supabase Auth (re-verification).
+
+DELETE /me                               [any]
+    Requires a confirm field. Deletes the profile and data (see Section 5), then the auth user.
+
+GET /me/settings, PUT /me/settings       [any]
+    Notification and privacy toggles.
+
+--------------------------------------------------------------------------------
+UPLOADS
+--------------------------------------------------------------------------------
+POST /uploads/sign {kind: avatar|logo|cover|opportunity, contentType, size}
+    [session; kind must match account type]
+    Returns {path, uploadUrl, publicUrl}. The frontend uploads directly to Storage, then sends
+    path in the entity payload. Validates MIME (jpeg/png/webp), max ~2 MB, and puts the account
+    id in the path.
+
+--------------------------------------------------------------------------------
+VOLUNTEER PROFILES
+--------------------------------------------------------------------------------
+GET /volunteers/me                       [V]
+    Own profile with stats.
+
+PATCH /volunteers/me                     [V]
+    Any profile field. Same validation as onboarding.
+
+GET /volunteers/:id                      [O]
+    See Section 5 for restrictions [G4]. Applies privacy: if public_profile = false, returns only
+    name, headline, city and private: true. Hours are omitted when show_hours = false, history
+    when show_history = false. Contact email and phone are included only for volunteers with a
+    registration on this org's opportunities.
+
+--------------------------------------------------------------------------------
+OPPORTUNITIES
+--------------------------------------------------------------------------------
+GET /opportunities                       [V; PUBLIC for a limited landing list, G15]
+    Query: q, city, category, date (any/today/week/month), type (One-time/Recurring/Virtual/
+    Skills-based), sort (soonest/newest/spots/hours), page, pageSize. Only published, not-past
+    opportunities. Response items include org summary, spotsLeft, and the caller's registration
+    status and saved flag.
+
+GET /opportunities/:id                   [V, or O if owner]
+    Published opportunities are visible to any session. Drafts only to the owning org.
+
+GET /opportunities/recommended           [V]
+    Top N by interest/follow/skill score, excluding ones the volunteer is already registered
+    for [G18].
+
+GET /org/opportunities?bucket=active|upcoming|completed|draft   [O]
+    Own opportunities with registeredCount, pendingCount, attendedCount.
+
+POST /org/opportunities                  [O]
+    Body: all fields from the create form, including status (draft or published). Publish rules
+    in Section 4. If published, notifies followers who have new_opportunity_notifications on.
+
+PATCH /org/opportunities/:id             [O owner]
+    Edit. Can move draft -> published.
+
+DELETE /org/opportunities/:id            [O owner]
+    See Section 4 for rules when registrations exist.
+
+--------------------------------------------------------------------------------
+REGISTRATIONS: VOLUNTEER
+--------------------------------------------------------------------------------
+POST /opportunities/:id/registrations    [V]
+    Register. Errors: REGISTRATION_CLOSED, SPOTS_FULL, ALREADY_REGISTERED,
+    REGISTRATION_REVOKED. Notifies the org.
+
+POST /registrations/:id/cancel           [V owner]
+    Notifies the org.
+
+GET /me/registrations?tab=upcoming|past|canceled   [V]
+    Each item includes the opportunity and registration status, and attended flag for past ones.
+
+PUT /opportunities/:id/saved, DELETE /opportunities/:id/saved   [V]
+    Save / unsave.
+
+GET /me/saved                            [V]
+    Saved list.
+
+--------------------------------------------------------------------------------
+REGISTRATIONS: ORGANIZATION
+--------------------------------------------------------------------------------
+GET /org/registrations                   [O]
+    Query: opportunityId, status (all/pending/approved/verify/closed), q, page, pageSize.
+    Response: rows with volunteer summary, opportunity summary, registration fields, plus tab
+    counts. Sorted pending first, then event date descending.
+
+POST /org/registrations/:id/approve      [O owner]
+    pending or declined -> approved. Notifies the volunteer.
+
+POST /org/registrations/:id/decline      [O owner]
+    pending -> declined. Notifies the volunteer.
+
+POST /org/registrations/:id/remove       [O owner]
+    approved -> removed. Clears attended and verified. Notifies the volunteer.
+
+POST /org/registrations/:id/attended {attended: boolean}   [O owner]
+    Approved only. Setting false clears hours_verified. [G5]
+
+POST /org/registrations/:id/verify-hours {hours}           [O owner]
+    Requires attended. Hours 0.5-24. Notifies the volunteer.
+
+POST /org/registrations/:id/unverify-hours                 [O owner]
+    Back to pending.
+
+GET /org/volunteers                      [O]
+    Query: q, sort (hours/events/recent). Volunteers with at least one approved and attended
+    registration. Response: profile summary, verified hours, events attended, last event date.
+    Contact info included only for these volunteers.
+
+--------------------------------------------------------------------------------
+ORGANIZATIONS AND FOLLOWING
+--------------------------------------------------------------------------------
+GET /organizations                       [V]
+    Query: q, focus, following=true, paging. Each item includes activeOpportunityCount,
+    followerCount, isFollowing.
+
+GET /organizations/:id                   [V or O]
+    Profile, impact stats (verified hours, events completed, volunteer count, open
+    opportunities), active opportunities, past events, followerCount, isFollowing.
+
+GET /org/profile                         [O]
+    Own profile (same shape).
+
+PATCH /org/profile                       [O]
+    Any field except verified.
+
+PUT /organizations/:id/follow, DELETE /organizations/:id/follow   [V]
+    Idempotent. Follow notifies the org.
+
+GET /me/following                        [V]
+    List.
+
+--------------------------------------------------------------------------------
+FEED AND POSTS
+--------------------------------------------------------------------------------
+GET /feed                                [V]
+    Query: scope=all|following, category, q, cursor. Returns a merged, newest-first list of
+    {type: 'opportunity' | 'post', ...}. Opportunities: published, not past, by created_at.
+    Posts: all (including platform announcements) by created_at. In "following" scope, only
+    followed orgs. A category filter applies to opportunity category, or to the post's org
+    focus.
+
+POST /org/posts                          [O]
+    {title, body, image?}.
+
+POST /admin/posts                        [A]
+    Platform announcement (org_id null).
+
+--------------------------------------------------------------------------------
+VOLUNTEER DASHBOARD AND HOURS
+--------------------------------------------------------------------------------
+GET /me/dashboard                        [V]
+    {totals: {total, verified, pending, completed}, upcomingCount, followingCount,
+    upcoming: [next events]}.
+
+GET /me/hours                            [V]
+    Query: status (all/verified/pending). Entries per HourEntry shape, plus summary and monthly
+    (last 6 months, total hours).
+
+POST /me/hours/manual                    [V]
+    {orgName, title, date, hours, notes?}. Always pending.
+
+DELETE /me/hours/manual/:id              [V owner]
+    Manual entries only.
+
+--------------------------------------------------------------------------------
+NOTIFICATIONS
+--------------------------------------------------------------------------------
+GET /me/notifications                    [any]
+    Newest first, with unreadCount.
+
+POST /notifications/:id/read             [owner]
+
+POST /me/notifications/read-all          [any]
+
+--------------------------------------------------------------------------------
+ORGANIZATION DASHBOARD AND ANALYTICS
+--------------------------------------------------------------------------------
+GET /org/overview                        [O]
+    Stats cards, pending approvals (first 5), upcoming events with filled counts, recent
+    activity (latest 8 registrations).
+
+GET /org/analytics                       [O]
+    Totals (see Section 4), registrationsByMonth, verifiedHoursByMonth, topEvents (top 5 by
+    attendance), registrationsByCategory.
+
+--------------------------------------------------------------------------------
+ADMIN
+--------------------------------------------------------------------------------
+PATCH /admin/organizations/:id/verify {verified}   [A]
+    Sets the badge.
+
+
+================================================================================
+4. BUSINESS RULES
+================================================================================
+
+SPOTS
+  - spots_left = spots - count(registrations where status in (pending, approved)).
+    Declined, cancelled and removed free the spot.
+  - Registration must run in a transaction with a row lock on the opportunity
+    (SELECT ... FOR UPDATE or a Postgres function) so two volunteers cannot take the last
+    spot. Overbooking is never allowed.
+  - Approving a declined registration must also check spots again.
+  - Rule [G9]: reject lowering spots below the current pending + approved count.
+
+REGISTRATION
+  - Allowed only for a published opportunity that is not past, and registration_deadline >=
+    today in the event's timezone.
+  - One registration per volunteer and opportunity. Re-registering after cancel resets the row
+    to pending.
+  - Declined and removed volunteers cannot re-register.
+  - A volunteer may cancel at any time while pending or approved.
+  - The org must own the opportunity to approve, decline, remove, attend or verify.
+  - Attendance requires approved (and, in production, event_date <= today [G5]). Verifying
+    requires attended.
+  - Setting attended = false, or leaving approved, clears hours_verified.
+  - registrations.hours starts as the opportunity's hours at registration time and does not
+    change if the opportunity is edited later. Verification may override it.
+
+PUBLISHING AND EDITING
+  - A draft needs only a title. Publishing requires every field in the CHECK constraint,
+    event_date >= today for new events, end_time > start_time, and deadline <= event_date.
+    Validation messages should mirror the frontend's.
+  - A published opportunity with registrations should notify registrants on date, time or
+    location changes [G9].
+  - Deleting an opportunity with registrations should require explicit confirmation. Recommend
+    the API also notify and cancel registrations instead of a silent cascade.
+  - Recurring opportunities never become "completed" [G1].
+
+HOURS
+  - Verified hours = sum of registrations.hours where approved AND attended AND hours_verified.
+  - Pending hours  = same where NOT hours_verified, plus all manual entries.
+  - Total          = verified + pending.
+  - Completed events = count of approved and attended registrations (verified or not).
+  - Manual entries: date not in the future, hours between 0.5 and 24, always pending,
+    deletable by their owner only [G6].
+
+VOLUNTEER DASHBOARD
+  - Upcoming events = registrations in pending or approved status whose opportunity is not past
+    and has event_date >= today.
+  - Organizations followed = count of follows.
+
+ORG STATS
+  - Total registrations = count of registrations with status pending or approved (all published
+    opportunities).
+  - Hours contributed = verified hours (above).
+  - Hours to verify = sum of hours where approved AND attended AND NOT verified.
+  - Active opportunities = published and not past. Upcoming events = same set, ordered by date.
+  - Completed events = published, non-recurring, date < today.
+  - ATTENDANCE RATE = attended / approved, over registrations on PAST opportunities only,
+    rounded to a whole percent (0 when there are none).
+  - Unique volunteers = distinct volunteers with at least one approved and attended
+    registration. Returning = those with more than one. Returning rate = returning / unique,
+    rounded.
+  - Monthly charts: last 6 calendar months by opportunity event date.
+      Registrations = pending + approved.
+      Hours = verified hours.
+      Top events = published past opportunities ordered by attended count (5).
+      By cause = pending + approved registrations grouped by opportunity category.
+
+ORG VOLUNTEERS LIST
+  - A volunteer with at least one approved and attended registration on this org's
+    opportunities. hours = verified only. events = attended count. lastDate = latest event date.
+
+PRIVACY (volunteer profile seen by an org)
+  - public_profile = false -> minimal header only.
+  - show_hours = false     -> hide hour numbers.
+  - show_history = false   -> hide history.
+  - visibility and the org-side public_profile need a decision [G3].
+
+NOTIFICATION RULES
+  - new_opportunity is created for followers only when new_opportunity_notifications is on (the
+    frontend already does this).
+  - Other in-app notifications are always created. The email_* toggles gate email delivery only,
+    if emails are built [G11].
+  - Triggers: register (->org), cancel (->org), approve/decline/remove (->volunteer), hours
+    verified (->volunteer), follow (->org), publish (->followers), onboarding complete (->self).
+
+VALIDATION (server-side mirror of the frontend)
+  Password >= 8; bio 20-400; org description >= 30 and mission >= 10; opportunity title >= 5 and
+  description >= 20; post title >= 3 and body >= 10; phone and website formats; headline <= 80;
+  interests/focus >= 1; spots >= 1; hours > 0.
+
+
+================================================================================
+5. AUTHORIZATION AND SECURITY
+================================================================================
+
+ROLES
+  Capability                                            Volunteer   Organization    Admin
+  ----------------------------------------------------  ---------   -------------   -----
+  Browse feed, opportunities, organizations             yes         yes (own area)  yes
+  Register, cancel, save, follow, log manual hours      yes         no              no
+  Create/manage opportunities, registrations, posts     no          own only        no
+  View volunteer profiles                               no          restricted [G4] yes
+  Set "verified", post announcements                    no          no              YES
+
+OWNERSHIP CHECKS
+  Resolve the caller's account_id from the JWT, then:
+  - Org endpoints: opportunities.org_id must equal the caller's organizations.id.
+  - Registration actions: join registration -> opportunity -> org and compare.
+  - Volunteer endpoints: registrations.volunteer_id or manual_hour_entries.volunteer_id must
+    equal the caller's profile.
+  - Never trust an org or volunteer ID from the request body.
+
+PUBLIC VS PRIVATE FIELDS
+  - Organization (visible to signed-in volunteers): name, logo, cover, type, description,
+    mission, website, city, contact email, phone, focus, verified, stats. Everything else is
+    internal.
+  - Volunteer (visible to an org that has a registration relationship): name, avatar, headline,
+    city, bio, skills, interests, availability, and (subject to privacy toggles) hours and
+    history. Email and phone are visible only to orgs with a registration relationship. Never
+    expose account email to other volunteers.
+  - Notifications and settings are private to the owner.
+
+CREDENTIALS AND TOKENS
+  - Passwords are handled only by Supabase Auth. The API never sees or stores them. Demo
+    passwords and demo accounts must not exist in production.
+  - The API verifies the Supabase JWT on every request. The frontend keeps the session via
+    supabase-js. The "remember me" checkbox maps to session persistence.
+  - The service-role key and DB URL live only in API environment variables. Never ship them to
+    the frontend. Set CORS to the frontend origin only.
+  - Add rate limits on registration, uploads and write endpoints. Use Zod on every body and
+    query.
+
+UPLOADS
+  - Signed upload URLs scoped to the caller, MIME allowlist (jpeg/png/webp), size cap, and
+    server-generated paths. Public-read buckets are fine since these images are public content.
+    Never accept raw paths pointing at other users' files.
+  - Delete the old object when an image is replaced or removed, and delete all of an account's
+    objects on account deletion.
+
+ACCOUNT DELETION
+  DELETE /me requires a confirmation field.
+  - Volunteer: delete follows, saves, manual hours and notifications. Recommend anonymizing
+    their registrations instead of deleting, so org history stays consistent [G14].
+  - Organization: delete opportunities, registrations, posts and follows, and notify registered
+    volunteers of cancellations.
+  - Then remove storage objects and the auth user (requires the service role).
+
+
+================================================================================
+6. FRONTEND INTEGRATION NOTES
+================================================================================
+
+WHAT CHANGES IN THE FRONTEND (the structure already isolates the work)
+  - store/actions.ts -> async API client functions with the same names (registerForOpportunity,
+    verifyHours, ...). Today's Result return shape ({ok} / {ok:false, error}) maps onto API
+    success and error responses.
+  - store/store.ts and useDB() -> replaced by a data-fetching layer (React Query or SWR is a
+    practical choice). Each page loads its own data.
+  - store/selectors.ts -> logic moves server-side; the frontend receives computed values
+    (spotsLeft, hourTotals, orgStats, bucket, isFollowing, isSaved).
+  - useSession() -> backed by GET /me. Route guards use accountType and onboarded from it.
+  - login, loginDemo, signup, logout -> supabase-js. Remove the demo buttons and demo
+    credentials for production.
+  - toast stays. Mutations should invalidate or refetch affected queries (replaces the instant
+    state updates).
+  - Notifications: poll GET /me/notifications (for example every 30-60 s) for the bell badge.
+  - resetDemoData is prototype-only and goes away.
+
+RESPONSE SHAPE
+  JSON in camelCase, ISO-8601 for timestamps, and YYYY-MM-DD / HH:mm for local event fields.
+
+      { "data": <object | array>, "meta": { "page": 1, "pageSize": 25, "total": 120 } }
+
+  Embed summaries to avoid N+1 calls (opportunity items include
+  org: {id, name, logoUrl, verified, city}, spotsLeft, myRegistration, saved).
+
+ERRORS
+  One shape, standard HTTP codes (400/401/403/404/409/422/429):
+
+      { "error": { "code": "SPOTS_FULL", "message": "Sorry, every spot is taken.",
+                   "fields": { "email": "..." } } }
+
+  Keep the frontend's user-facing messages as the "message" text. "fields" is for form
+  validation errors so inline errors continue to work.
+
+PAGINATION
+  page + pageSize (default 25, max 100) for lists (Explore, orgs, registrations, volunteers,
+  notifications), matching the existing "Show more" pattern on Registrations. Use a cursor for
+  /feed. Summary tab counts (registrations) come from the same response.
+
+IMAGES
+  Store *_path in the DB; the API returns *Url (full public CDN URL) next to it, or null.
+  The frontend flow becomes:
+    pick file -> readImage (existing client-side resize) -> POST /uploads/sign ->
+    PUT to uploadUrl -> send path in the save payload.
+  The category-photo and initials fallbacks stay client-side. ImageUpload.value changes from a
+  data URL to a URL.
+
+DATES
+  Display event date and time exactly as returned, with the timezone shown only if it differs
+  from Eastern. Do not run event times through new Date() conversion. The todayISO()-based past
+  checks must move server-side or use isPast from the API.
+
+
+================================================================================
+7. BUILD CHECKLIST
+================================================================================
+
+SERVICES AND CONFIG
+  [ ] Supabase project (Postgres, Auth, Storage) with separate dev and prod projects
+  [ ] Decide email-confirmation behavior [G2]; configure custom SMTP and email templates
+  [ ] Node API host and frontend static host with SPA fallback
+  [ ] Env vars: SUPABASE_URL, anon key (frontend), service-role key and DATABASE_URL (API
+      only), CORS origin, email provider key
+  [ ] Storage buckets and policies (public read, signed writes, size and MIME limits)
+  [ ] RLS enabled on all tables with deny-by-default
+  [ ] Postgres connection via pooler for transactional work
+
+SCHEMA
+  [ ] Migrations (Supabase CLI) for the 11 tables, enums, CHECK constraints, unique
+      constraints, indexes
+  [ ] Triggers: updated_at; starts_at/ends_at from local date/time/timezone; signup -> account
+      bootstrap if done in the DB
+  [ ] Views or queries: unified hour entries, spots left, org stats
+  [ ] Decide G1, G3, G6, G8, G14 before freezing the schema
+
+API GROUPS
+  [ ] Auth/session (/me, onboarding, settings, delete)
+  [ ] Uploads
+  [ ] Volunteer profiles
+  [ ] Opportunities (search + org CRUD)
+  [ ] Registrations (volunteer + org)
+  [ ] Organizations and follows
+  [ ] Feed and posts
+  [ ] Hours
+  [ ] Notifications
+  [ ] Org volunteers
+  [ ] Org overview and analytics
+  [ ] Admin (verify, announcements)
+  [ ] Shared validation schemas, error format, pagination, rate limiting
+  [ ] Notification creation inside the same transactions as the actions that trigger them
+  [ ] Automated tests for the transactional rules: last-spot race, status transitions,
+      ownership, privacy
+
+SEED AND DEMO DATA
+  [ ] Seed script for dev/staging mirroring data/seed.ts (10 orgs, ~40 opportunities,
+      volunteers, registrations, posts) with real Supabase auth users for the two demo
+      accounts. Never run in production.
+  [ ] One admin account created manually
+
+DOCUMENTATION
+  [ ] API reference (OpenAPI or a markdown list of the endpoints above)
+  [ ] Schema diagram and status-transition table
+  [ ] Decisions log for G1-G18
+  [ ] Environment setup, migration and deployment guide
+  [ ] Frontend migration note: action-by-action mapping from store/actions.ts to endpoints

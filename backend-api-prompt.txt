@@ -1,0 +1,68 @@
+PROMPT FOR CLAUDE: INDYTEER BACKEND REQUIREMENTS
+
+I am planning the backend for IndyTeer, an Indiana volunteer networking and opportunity platform. The frontend is a React app in this repository, and the backend will use Node.js. We expect to use Supabase, but we have not finalized the design.
+
+YOUR TASK
+
+Inspect the existing frontend source, especially:
+- src/types.ts
+- src/store/actions.ts
+- src/store/selectors.ts
+- src/pages/
+- src/components/domain/
+
+Then give me a clear, complete list of everything the backend will need to support the frontend. This is a requirements and planning task only.
+
+IMPORTANT: Do not write backend code, create files, generate migrations, install packages, edit the frontend, or start implementing anything. Do not produce a complete application. Only report the requirements and recommendations so I can decide what to build next.
+
+Keep the answer straightforward and specific to the actual frontend. Do not assume features that are not present. Call out any assumptions or frontend/backend gaps separately instead of silently inventing requirements.
+
+PLEASE ORGANIZE YOUR ANSWER INTO THESE SECTIONS:
+
+1. REQUIRED SERVICES
+List every external service the backend needs, what each service is responsible for, and whether it is required or optional. Consider Node.js hosting, database, authentication, file/image storage, email, and any other service the frontend truly needs. The frontend currently has mock authentication, local image previews, and localStorage state; distinguish prototype behavior from production requirements. Do not recommend unnecessary integrations.
+
+2. DATABASE SCHEMA
+For every required table/entity, list:
+- Table name and purpose.
+- Fields and suggested database types.
+- Primary and foreign keys.
+- Required, optional, and default values.
+- Unique constraints, indexes, and relationships.
+- Any enum values or status transitions.
+
+Cover at least the entities actually used in the frontend: user/account, volunteer profile, organization profile, opportunity, registration, volunteer hour entry, organization follow, saved opportunity, organization/platform post, notification, and user settings. Add other entities only if the frontend workflows require them. Explain which counts/statistics should be calculated rather than stored.
+
+3. API ENDPOINT INVENTORY
+List the REST endpoints the frontend needs, grouped by feature. For each endpoint include:
+- HTTP method and route.
+- What it does and which account type can call it.
+- Important request fields and query parameters.
+- Important response fields.
+- Validation, ownership, and permission rules.
+
+Include authentication and onboarding, account/profile/settings, opportunity search and management, registrations, organization directory/following, feed/posts, volunteer hours, notifications, organization volunteer management, and analytics wherever the frontend uses them. Identify which endpoints are public and which require a session.
+
+4. BUSINESS RULES
+Describe the data rules the API must enforce, including available spots and overbooking, registration deadlines, duplicate registrations, volunteer cancellation, organization approval/decline, attendance, verified versus pending hours, manual hour submissions, privacy settings, account ownership, and notification preferences. Explain the formulas for dashboard and analytics totals.
+
+5. AUTHORIZATION AND SECURITY
+Explain how volunteer and organization permissions should differ, how organization ownership is checked, which profile fields are public/private, and how credentials, tokens, uploads, and account deletion should be handled. Clearly identify any platform-admin-only actions such as organization verification or platform announcements.
+
+6. FRONTEND INTEGRATION NOTES
+Explain what frontend state/actions will need to become API calls, what the API response shape should look like, how errors and pagination should work, and how uploaded images should be represented. Keep the proposed conventions simple and consistent.
+
+7. BUILD CHECKLIST
+Finish with a concise checklist of the services, schema, endpoint groups, configuration, seed/demo data, and documentation the team needs before implementation can be considered ready.
+
+TECHNICAL CONTEXT AND CONSTRAINTS
+- Backend runtime: Node.js; recommend a practical framework only if useful.
+- Likely platform: Supabase for PostgreSQL, authentication, and file storage. Confirm which Supabase pieces are needed and whether the Node.js API should own all data access.
+- Two account types: volunteer and organization.
+- The frontend uses local mock state today; no real backend or authentication has been implemented.
+- Opportunity data includes category, event date/time, location, available spots, required skills, estimated hours, registration deadline, recurrence, instructions, and draft/published state.
+- Account settings include email notifications, reminders, new opportunity and organization updates, registration confirmations, profile visibility, public hours, and public history.
+- The app is Indiana-based. Explain how to store event dates/times so local Indiana event times display correctly.
+- Keep the output concise but complete. Prefer clear lists and compact tables over long explanations.
+
+Do not implement the requirements. Return only the analysis and planning list described above.
