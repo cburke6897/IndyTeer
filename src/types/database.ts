@@ -333,14 +333,14 @@ isOneToOne: false
                   ]
                 },"user_settings": {
                   Row: {
-                    "created_at": string,"email_notifications": boolean,"new_opportunity_notifications": boolean,"registration_notifications": boolean,"updated_at": string,"user_id": string
+                    "created_at": string,"email_notifications": boolean,"new_opportunity_notifications": boolean,"opt_out_organization_invites": boolean,"registration_notifications": boolean,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"email_notifications"?: boolean,"new_opportunity_notifications"?: boolean,"registration_notifications"?: boolean,"updated_at"?: string,"user_id": string
+                    "created_at"?: string,"email_notifications"?: boolean,"new_opportunity_notifications"?: boolean,"opt_out_organization_invites"?: boolean,"registration_notifications"?: boolean,"updated_at"?: string,"user_id": string
                   }
                   Update: {
-                    "created_at"?: string,"email_notifications"?: boolean,"new_opportunity_notifications"?: boolean,"registration_notifications"?: boolean,"updated_at"?: string,"user_id"?: string
+                    "created_at"?: string,"email_notifications"?: boolean,"new_opportunity_notifications"?: boolean,"opt_out_organization_invites"?: boolean,"registration_notifications"?: boolean,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -422,6 +422,22 @@ isOneToOne: true
           }
           Functions: {
             "accept_organization_invite":
+{ Args: { "p_organization_id": string }; Returns: {
+              "created_at": string,
+"invited_by": string | null,
+"organization_id": string,
+"role": Database["public"]['Enums']["organization_role"],
+"status": Database["public"]['Enums']["membership_status"],
+"updated_at": string,
+"user_id": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "organization_memberships"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"decline_organization_invite":
 { Args: { "p_organization_id": string }; Returns: {
               "created_at": string,
 "invited_by": string | null,

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Bell, Lock, LogOut, RotateCcw, ShieldCheck, Trash2, User, UserCog } from 'lucide-react'
 import { PageHeader } from '../../components/ui/PageHeader'
 import { Card, CardHeader } from '../../components/ui/Card'
@@ -21,6 +21,9 @@ import { useLogout } from '../../auth/useLogout'
 import { useAvatarUpload } from '../../media/useAvatarUpload'
 import { toast } from '../../store/toast'
 import type { Settings } from '../../types'
+import { getSettings as getBackendSettings, updateSettings as updateBackendSettings } from '../../lib/api/settings'
+import { acceptOrganizationInvite, declineOrganizationInvite, listMyOrganizationInvitations } from '../../lib/api/organizations'
+import type { UserSettings } from '../../types/models'
 
 type Section = 'account' | 'profile' | 'notifications' | 'privacy'
 const sections: { id: Section; label: string; icon: typeof User }[] = [
@@ -183,8 +186,49 @@ function useSettings() {
 
 function NotificationsSection() {
   const { s, update } = useSettings()
+  const { user } = useSession()
+  const [inviteOptOut, setInviteOptOut] = useState(false)
+  const [invitePreferenceLoaded, setInvitePreferenceLoaded] = useState(false)
+  const [inviteBusy, setInviteBusy] = useState(false)
+  const [invitations, setInvitations] = useState<Array<{ membership: import('../../types/models').OrganizationMembership; organizationName: string }>>([])
+  const [invitationsLoaded, setInvitationsLoaded] = useState(false)
   const n = s.notifications
   const set = (k: keyof Settings['notifications']) => (v: boolean) => { update((x) => ({ ...x, notifications: { ...x.notifications, [k]: v } })); toast('Notification preference saved.', 'info') }
+  useEffect(() => {
+    let alive = true
+    void getBackendSettings().then((settings) => {
+      if (alive) { setInviteOptOut(settings.opt_out_organization_invites); setInvitePreferenceLoaded(true) }
+    }).catch((error: unknown) => {
+      if (alive) toast(error instanceof Error ? error.message : 'Could not load invitation settings.', 'error')
+    })
+    void listMyOrganizationInvitations().then((pending) => {
+      if (alive) { setInvitations(pending); setInvitationsLoaded(true) }
+    }).catch((error: unknown) => {
+      if (alive) toast(error instanceof Error ? error.message : 'Could not load organization invitations.', 'error')
+    })
+    return () => { alive = false }
+  }, [user?.id])
+  const toggleInviteOptOut = async (value: boolean) => {
+    setInviteBusy(true)
+    try {
+      const saved: UserSettings = await updateBackendSettings({ opt_out_organization_invites: value })
+      setInviteOptOut(saved.opt_out_organization_invites)
+      toast(value ? 'New organization invitations are blocked.' : 'You can receive organization invitations again.', 'info')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not update invitation preference.', 'error')
+    } finally { setInviteBusy(false) }
+  }
+  const handleInvitation = async (organizationId: string, accept: boolean) => {
+    setInviteBusy(true)
+    try {
+      if (accept) await acceptOrganizationInvite(organizationId)
+      else await declineOrganizationInvite(organizationId)
+      setInvitations(await listMyOrganizationInvitations())
+      toast(accept ? 'Organization invitation accepted.' : 'Organization invitation declined.', 'info')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not update invitation.', 'error')
+    } finally { setInviteBusy(false) }
+  }
   return (
     <Card>
       <CardHeader title="Notifications" subtitle="Choose what IndyTeer tells you about" />
@@ -194,7 +238,20 @@ function NotificationsSection() {
         <ToggleRow title="New opportunity notifications" description="When organizations you follow post new opportunities." checked={n.newOpportunities} onChange={set('newOpportunities')} />
         <ToggleRow title="Organization updates" description="News and announcements from organizations you follow." checked={n.orgUpdates} onChange={set('orgUpdates')} />
         <ToggleRow title="Registration confirmations" description="Confirmations when registrations are approved or change." checked={n.confirmations} onChange={set('confirmations')} />
+        <ToggleRow title="Block organization invitations" description="Stop organizations from sending you new invitations. Existing invitations stay available to accept or decline." checked={inviteOptOut} onChange={toggleInviteOptOut} disabled={!invitePreferenceLoaded || inviteBusy} />
       </div>
+      {invitationsLoaded && invitations.length > 0 && <div className="border-t border-line px-5 py-4">
+        <h3 className="text-sm font-semibold text-ink">Organization invitations</h3>
+        <div className="mt-2 divide-y divide-line">
+          {invitations.map(({ membership, organizationName }) => <div key={membership.organization_id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <div><p className="text-sm font-semibold text-ink">{organizationName}</p><p className="text-xs text-muted">Invited as {membership.role}</p></div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" disabled={inviteBusy || !invitationsLoaded} onClick={() => void handleInvitation(membership.organization_id, false)}>Decline</Button>
+              <Button size="sm" variant="primary" disabled={inviteBusy || !invitationsLoaded} onClick={() => void handleInvitation(membership.organization_id, true)}>Accept</Button>
+            </div>
+          </div>)}
+        </div>
+      </div>}
     </Card>
   )
 }

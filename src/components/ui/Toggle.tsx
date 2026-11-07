@@ -16,14 +16,14 @@ export function Toggle({ checked, onChange, label, disabled }: { checked: boolea
   )
 }
 
-export function ToggleRow({ title, description, checked, onChange }: { title: string; description?: string; checked: boolean; onChange: (v: boolean) => void }) {
+export function ToggleRow({ title, description, checked, onChange, disabled }: { title: string; description?: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-6 py-3.5">
       <div>
         <p className="text-sm font-semibold text-ink">{title}</p>
         {description && <p className="mt-0.5 text-[13px] text-muted">{description}</p>}
       </div>
-      <Toggle checked={checked} onChange={onChange} label={title} />
+      <Toggle checked={checked} onChange={onChange} label={title} disabled={disabled} />
     </div>
   )
 }

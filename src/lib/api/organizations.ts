@@ -55,6 +55,19 @@ export async function listMyMemberships(): Promise<OrganizationMembership[]> {
   return data as OrganizationMembership[]
 }
 
+export async function listMyOrganizationInvitations(): Promise<Array<{ membership: OrganizationMembership; organizationName: string }>> {
+  const memberships = (await listMyMemberships()).filter((membership) => membership.status === 'invited')
+  if (!memberships.length) return []
+  const { data, error } = await db.from('public_organizations').select('id,name')
+    .in('id', memberships.map((membership) => membership.organization_id))
+  if (error) throw new Error(error.message)
+  const names = new Map((data ?? []).map((organization) => [organization.id, organization.name]))
+  return memberships.map((membership) => ({
+    membership,
+    organizationName: names.get(membership.organization_id) ?? 'An organization',
+  }))
+}
+
 export async function listOrganizationMemberships(organizationId: string): Promise<OrganizationMembership[]> {
   const { data, error } = await db.from('organization_memberships').select('*').eq('organization_id', organizationId)
   if (error) throw new Error(error.message)
@@ -81,6 +94,12 @@ export async function inviteUserToOrganization(
 
 export async function acceptOrganizationInvite(organizationId: string): Promise<OrganizationMembership> {
   const { data, error } = await db.rpc('accept_organization_invite', { p_organization_id: organizationId })
+  if (error) throw new Error(error.message)
+  return data as OrganizationMembership
+}
+
+export async function declineOrganizationInvite(organizationId: string): Promise<OrganizationMembership> {
+  const { data, error } = await db.rpc('decline_organization_invite', { p_organization_id: organizationId })
   if (error) throw new Error(error.message)
   return data as OrganizationMembership
 }

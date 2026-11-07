@@ -151,6 +151,7 @@ export interface UserSettings {
   new_opportunity_notifications: boolean
   registration_notifications: boolean
   email_notifications: boolean
+  opt_out_organization_invites: boolean
   created_at: string
   updated_at: string
 }
