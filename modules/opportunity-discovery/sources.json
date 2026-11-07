@@ -1,0 +1,19 @@
+[
+  {
+    "id": "nps-events",
+    "name": "National Park Service",
+    "adapter": "nps",
+    "enabled": true,
+    "url": "https://developer.nps.gov/api/v1/events",
+    "permission": {
+      "basis": "official-api",
+      "evidenceUrl": "https://www.nps.gov/subjects/developer/guides.htm",
+      "rightsUrl": "https://www.nps.gov/aboutus/disclaimer.htm",
+      "reviewedAt": "2026-11-07",
+      "note": "Official API intended for external reuse. Collect event facts only; no photos, personal contact details or copied descriptions. NPS-created material generally public domain; contributed material may have separate restrictions."
+    },
+    "minIntervalMinutes": 360,
+    "maxPages": 4,
+    "pageSize": 50
+  }
+]

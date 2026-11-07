@@ -1,0 +1,29 @@
+name: Opportunity discovery checks
+on:
+  push:
+    branches: [main, feat/opportunity-discovery]
+    paths: ['modules/opportunity-discovery/**', '.github/workflows/discovery.yml']
+  pull_request:
+    paths: ['modules/opportunity-discovery/**', '.github/workflows/discovery.yml']
+jobs:
+  discovery:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/opportunity-discovery
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: modules/opportunity-discovery/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: discovery-browser-results
+          path: modules/opportunity-discovery/test-results/

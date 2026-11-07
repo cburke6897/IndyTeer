@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>IndyTeer · Discover</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" type="module"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/"
+        ><span class="brand-icon">i<span>✦</span></span
+        >IndyTeer <span class="brand-divider"></span><span class="brand-sub">Discover</span></a
+      >
+      <div class="header-right">
+        <span class="local-badge"><i></i> Independent module</span
+        ><button id="account" class="button subtle">Connect account</button>
+      </div>
+    </header>
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <div class="eyebrow"><span></span> REAL OPPORTUNITIES. RESPONSIBLE DISCOVERY.</div>
+          <h1>Good causes.<br /><em>Found for you.</em></h1>
+          <p>
+            Discover genuine volunteer opportunities from approved public sources. Every listing
+            keeps its origin. Every import starts with your review.
+          </p>
+          <div class="hero-actions">
+            <button id="scan" class="button primary"><span>↻</span> Find opportunities</button
+            ><label class="schedule"
+              ><input id="schedule" type="checkbox" /> Keep discovering automatically</label
+            >
+          </div>
+          <div id="scan-note" class="hero-note">
+            Indiana first. Built to grow across the country.
+          </div>
+        </div>
+        <div class="hero-art" aria-hidden="true">
+          <div class="orbit o1"></div>
+          <div class="orbit o2"></div>
+          <div class="orbit o3"></div>
+          <div class="center-mark">✦</div>
+          <div class="floating f1">
+            <b>✓</b><span>Verified source<small>National Park Service</small></span>
+          </div>
+          <div class="floating f2">
+            <b>↗</b><span>Real-world impact<small>Local opportunities, original links</small></span>
+          </div>
+          <div class="dot d1"></div>
+          <div class="dot d2"></div>
+          <div class="dot d3"></div>
+        </div>
+      </section>
+      <section class="stats" aria-label="Discovery statistics">
+        <div>
+          <span id="stat-all">0</span>
+          <p>Opportunities found</p>
+        </div>
+        <div>
+          <span id="stat-pending">0</span>
+          <p>Awaiting your review</p>
+        </div>
+        <div>
+          <span id="stat-imported">0</span>
+          <p>Imported as drafts</p>
+        </div>
+        <div>
+          <span id="stat-sources">0</span>
+          <p>Approved sources</p>
+        </div>
+      </section>
+      <section class="workspace">
+        <div class="listings">
+          <div class="section-heading">
+            <div>
+              <div class="eyebrow dark">THE DISCOVERY FEED</div>
+              <h2>A little time. A real difference.</h2>
+            </div>
+            <span id="result-count" class="result-count"></span>
+          </div>
+          <div class="filters">
+            <label class="search"
+              ><span>⌕</span
+              ><input
+                id="search"
+                type="search"
+                placeholder="Search opportunities, places, causes…"
+                aria-label="Search opportunities" /></label
+            ><select id="status" aria-label="Listing status">
+              <option value="pending">Needs review</option>
+              <option value="">All listings</option>
+              <option value="imported">Imported</option>
+              <option value="rejected">Dismissed</option>
+              <option value="withdrawn">Not recently listed</option>
+              <option value="excluded">Excluded</option>
+              <option value="duplicate">Duplicates</option>
+            </select>
+          </div>
+          <div id="cards" class="cards"></div>
+        </div>
+        <aside>
+          <section class="aside-card">
+            <div class="aside-icon">✦</div>
+            <h3>Discovery, with care.</h3>
+            <p>
+              We collect from approved sources, screen for volunteer opportunities, and keep the
+              facts traceable.
+            </p>
+            <ol>
+              <li>
+                <b>01</b><span>Find & filter<small>Permitted APIs and approved pages</small></span>
+              </li>
+              <li>
+                <b>02</b
+                ><span>Check the details<small>Dates, location, duplicates, freshness</small></span>
+              </li>
+              <li>
+                <b>03</b
+                ><span>Make it useful<small>Original signup or an authorized draft</small></span>
+              </li>
+            </ol>
+            <div class="aside-foot">External signups stay with the organizer.</div>
+          </section>
+          <section class="source-panel">
+            <div class="small-heading">
+              <h3>Your sources</h3>
+              <span class="live-dot"></span>
+            </div>
+            <div id="sources"></div>
+          </section>
+          <p class="privacy-note">
+            Your main app stays independent.<br />Scanning only writes to this module’s review
+            queue.
+          </p>
+        </aside>
+      </section>
+    </main>
+    <footer>
+      <span>IndyTeer Discover</span>
+      <p>Small acts. Stronger communities.</p>
+      <a
+        href="https://www.nps.gov/subjects/developer/guides.htm"
+        target="_blank"
+        rel="noopener noreferrer"
+        >Source & usage information ↗</a
+      >
+    </footer>
+    <dialog id="review-dialog">
+      <div class="dialog-head">
+        <div>
+          <div class="eyebrow dark">REVIEW BEFORE IMPORT</div>
+          <h2 id="review-title">Review opportunity</h2>
+        </div>
+        <button class="close" data-close="review-dialog" aria-label="Close review">×</button>
+      </div>
+      <p id="review-source" class="dialog-intro"></p>
+      <div id="review-notes" class="review-notes"></div>
+      <form id="review-form">
+        <div class="form-grid">
+          <label>Organization you represent<select id="organization" required></select></label
+          ><label>Event date<input id="date" type="date" required /></label
+          ><label>City<input id="city" required /></label
+          ><label>Venue<input id="location" required /></label
+          ><label>Start time<input id="startTime" type="time" required /></label
+          ><label>End time<input id="endTime" type="time" required /></label
+          ><label
+            >Timezone<select id="timezone">
+              <option value="">Confirm timezone</option>
+              <option value="America/Indiana/Indianapolis">Indiana / Indianapolis (Eastern)</option>
+              <option value="America/Chicago">Chicago / Indiana Dunes (Central)</option>
+              <option value="America/New_York">New York (Eastern)</option>
+              <option value="America/Denver">Denver (Mountain)</option>
+              <option value="America/Los_Angeles">Los Angeles (Pacific)</option>
+              <option value="America/Phoenix">Phoenix</option>
+              <option value="Pacific/Honolulu">Honolulu</option>
+              <option value="America/Anchorage">Anchorage</option>
+            </select></label
+          ><label
+            >Confirmed capacity<input
+              id="capacity"
+              type="number"
+              min="1"
+              max="10000"
+              required
+              placeholder="Ask the organizer" /></label
+          ><label
+            >Cause<select id="category">
+              <option>Environment</option>
+              <option>Community Events</option>
+              <option>Education & Youth</option>
+              <option>Hunger & Food</option>
+              <option>Health</option>
+              <option>Seniors</option>
+              <option>Arts & Culture</option>
+            </select></label
+          >
+        </div>
+        <label class="check"
+          ><input id="facts-confirmed" type="checkbox" required /><span
+            >I checked the original listing and confirmed these details and availability.</span
+          ></label
+        ><label class="check"
+          ><input id="authorization-confirmed" type="checkbox" required /><span
+            >I represent this organizer or have permission to manage this opportunity in the
+            selected organization.</span
+          ></label
+        >
+        <p class="draft-note">
+          Creates a draft only. No signup is sent and no opportunity is published automatically.
+        </p>
+        <div class="dialog-actions">
+          <button type="button" class="button subtle" data-close="review-dialog">Cancel</button
+          ><button id="import-button" class="button primary" type="submit">Import as draft</button>
+        </div>
+        <p id="review-error" role="alert" class="form-error"></p>
+      </form>
+    </dialog>
+    <dialog id="login-dialog">
+      <div class="dialog-head">
+        <div>
+          <div class="eyebrow dark">YOUR INDYTEER ACCOUNT</div>
+          <h2>Connect to import drafts</h2>
+        </div>
+        <button class="close" data-close="login-dialog" aria-label="Close login">×</button>
+      </div>
+      <p class="dialog-intro">
+        Use your existing account. Only organizations you own or administer can receive drafts. Your
+        password and session are never saved by this module.
+      </p>
+      <form id="login-form">
+        <label>Email<input type="email" id="email" autocomplete="username" required /></label
+        ><label
+          >Password<input
+            type="password"
+            id="password"
+            autocomplete="current-password"
+            required /></label
+        ><button type="submit" class="button primary">Connect securely</button>
+        <p id="login-error" role="alert" class="form-error"></p>
+      </form>
+    </dialog>
+    <div id="toast" role="status" hidden></div>
+  </body>
+</html>

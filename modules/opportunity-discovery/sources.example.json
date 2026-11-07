@@ -1,0 +1,19 @@
+[
+  {
+    "id": "authorized-partner-feed",
+    "name": "Your authorized partner",
+    "enabled": false,
+    "adapter": "feed",
+    "url": "https://partner.example.org/volunteering.xml",
+    "state": "IN",
+    "timezone": "America/Indiana/Indianapolis",
+    "permission": {
+      "basis": "written-permission",
+      "evidenceUrl": "https://partner.example.org/data-use-permission",
+      "reviewedAt": "2026-11-07",
+      "note": "Replace this example with real permission evidence before enabling. robots.txt alone is not a content license."
+    },
+    "minIntervalMinutes": 360,
+    "maxPages": 5
+  }
+]

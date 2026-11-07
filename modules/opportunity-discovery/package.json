@@ -1,0 +1,24 @@
+{
+  "name": "indyteer-opportunity-discovery",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "collect": "node src/cli.mjs collect",
+    "export": "node src/cli.mjs export",
+    "test": "node --test test/*.test.mjs",
+    "test:e2e": "playwright test",
+    "check": "npm test && npm audit --audit-level=moderate"
+  },
+  "dependencies": {
+    "cheerio": "1.2.0",
+    "robots-parser": "3.0.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.0"
+  }
+}
