@@ -1,16 +1,22 @@
 import { supabase } from '../lib/supabase'
+import type { AccountType } from '../types/models'
 
 export async function signUpWithEmail(
   email: string,
   password: string,
   displayName: string,
+  accountType: AccountType,
   extraMetadata: Record<string, string> = {},
 ) {
+  if (accountType !== 'volunteer' && accountType !== 'organization') {
+    throw new Error('Choose volunteer or organization as your account type.')
+  }
+  if (!displayName.trim()) throw new Error('Enter your full name.')
   const { data, error } = await supabase.auth.signUp({
     email: email.trim(),
     password,
     options: {
-      data: { display_name: displayName.trim(), ...extraMetadata },
+      data: { ...extraMetadata, full_name: displayName.trim(), account_type: accountType },
       emailRedirectTo: window.location.origin,
     },
   })

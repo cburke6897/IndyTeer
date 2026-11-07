@@ -12,6 +12,8 @@ import { completeVolunteerOnboarding } from '../../store/actions'
 import { useSession } from '../../store/session'
 import { toast } from '../../store/toast'
 import { useAvatarUpload } from '../../media/useAvatarUpload'
+import { useProfileContext } from '../../auth/useProfileContext'
+import { saveFullName } from '../../auth/accountService'
 
 const STEPS = ['About you', 'Interests & skills', 'Availability']
 
@@ -19,6 +21,8 @@ export default function VolunteerOnboardingPage() {
   const { user } = useSession()
   const navigate = useNavigate()
   const uploadAvatar = useAvatarUpload()
+  const { profile, setProfile } = useProfileContext()
+  const [saving, setSaving] = useState(false)
   const [step, setStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [f, setF] = useState({
@@ -44,13 +48,24 @@ export default function VolunteerOnboardingPage() {
     return Object.keys(e).length === 0
   }
 
-  function next() {
+  async function next() {
     if (!validate(step)) return
     if (step < STEPS.length - 1) return setStep(step + 1)
     if (!user) return
-    completeVolunteerOnboarding(user.id, { ...f, firstName: f.firstName.trim(), lastName: f.lastName.trim(), bio: f.bio.trim() })
-    toast('Your volunteer profile is ready. Welcome to IndyTeer!')
-    navigate('/app', { replace: true })
+    setSaving(true)
+    try {
+      const first = f.firstName.trim()
+      const last = f.lastName.trim()
+      // Keep the database display name in step with what the volunteer typed.
+      if (`${first} ${last}`.trim() !== (profile?.full_name ?? '').trim()) setProfile(await saveFullName(first, last))
+      completeVolunteerOnboarding(user.id, { ...f, firstName: first, lastName: last, bio: f.bio.trim() })
+      toast('Your volunteer profile is ready. Welcome to IndyTeer!')
+      navigate('/app', { replace: true })
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save your profile. Try again.', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -100,7 +115,7 @@ export default function VolunteerOnboardingPage() {
 
       <div className="mt-6 flex justify-between">
         <Button variant="secondary" size="lg" disabled={step === 0} onClick={() => setStep(step - 1)}><ArrowLeft size={16} /> Back</Button>
-        <Button variant={step === STEPS.length - 1 ? 'accent' : 'primary'} size="lg" onClick={next}>
+        <Button variant={step === STEPS.length - 1 ? 'accent' : 'primary'} size="lg" disabled={saving} onClick={() => void next()}>
           {step === STEPS.length - 1 ? 'Finish setup' : <>Continue <ArrowRight size={16} /></>}
         </Button>
       </div>

@@ -14,7 +14,8 @@ import { cn, isEmail } from '../../lib/utils'
 import { useSession } from '../../store/session'
 import { defaultSettings } from '../../data/seed'
 import { deleteAccount, resetDemoData, updateOrgProfile, updateSettings, updateUser, updateVolunteerProfile } from '../../store/actions'
-import { updateEmail, updatePassword, verifyPassword } from '../../auth/accountService'
+import { saveFullName, updateEmail, updatePassword, verifyPassword } from '../../auth/accountService'
+import { useProfileContext } from '../../auth/useProfileContext'
 import { useLogout } from '../../auth/useLogout'
 import { useAvatarUpload } from '../../media/useAvatarUpload'
 import { toast } from '../../store/toast'
@@ -57,6 +58,7 @@ function AccountSection() {
   const { user, volunteer, org } = useSession()
   const logout = useLogout()
   const uploadAvatar = useAvatarUpload()
+  const { setProfile } = useProfileContext()
   const [saving, setSaving] = useState(false)
   const [f, setF] = useState({ firstName: user!.firstName, lastName: user!.lastName, email: user!.email })
   const [err, setErr] = useState<Record<string, string>>({})
@@ -78,6 +80,7 @@ function AccountSection() {
     try {
       const emailChanged = f.email.trim().toLowerCase() !== user!.email.toLowerCase()
       if (emailChanged) await updateEmail(f.email)
+      setProfile(await saveFullName(f.firstName, f.lastName))
       updateUser(user!.id, { firstName: f.firstName.trim(), lastName: f.lastName.trim() })
       if (volunteer) updateVolunteerProfile(volunteer.id, { firstName: f.firstName.trim(), lastName: f.lastName.trim() })
       toast(emailChanged ? 'Saved. Confirm your new email address using the link we sent.' : 'Account details saved.')

@@ -8,12 +8,15 @@ import { isEmail, normalizeUrl } from '../../lib/utils'
 import { updateOrgProfile, updateVolunteerProfile } from '../../store/actions'
 import { toast } from '../../store/toast'
 import { useAvatarUpload } from '../../media/useAvatarUpload'
+import { useProfileContext } from '../../auth/useProfileContext'
+import { saveFullName } from '../../auth/accountService'
 import type { OrgProfile, VolunteerProfile } from '../../types'
 
 const phoneOk = (p: string) => !p || /^[\d\s().+-]{7,}$/.test(p)
 
 export function VolunteerProfileForm({ volunteer, onDone, onCancel, id }: { volunteer: VolunteerProfile; onDone?: () => void; onCancel?: () => void; id?: string }) {
   const uploadAvatar = useAvatarUpload()
+  const { setProfile } = useProfileContext()
   const [f, setF] = useState({
     firstName: volunteer.firstName, lastName: volunteer.lastName, headline: volunteer.headline, avatar: volunteer.avatar, city: volunteer.city,
     bio: volunteer.bio, interests: volunteer.interests, skills: volunteer.skills, phone: volunteer.phone, availability: volunteer.availability,
@@ -21,7 +24,7 @@ export function VolunteerProfileForm({ volunteer, onDone, onCancel, id }: { volu
   const [err, setErr] = useState<Record<string, string>>({})
   const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((p) => ({ ...p, [k]: v }))
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
     const x: Record<string, string> = {}
     if (!f.firstName.trim()) x.firstName = 'Required'
@@ -32,6 +35,13 @@ export function VolunteerProfileForm({ volunteer, onDone, onCancel, id }: { volu
     if (!phoneOk(f.phone)) x.phone = 'Enter a valid phone number.'
     setErr(x)
     if (Object.keys(x).length) return
+    try {
+      // Display name lives in public.profiles; avatar was already saved by the uploader.
+      setProfile(await saveFullName(f.firstName, f.lastName))
+    } catch (cause) {
+      setErr({ firstName: cause instanceof Error ? cause.message : 'Could not save your name. Try again.' })
+      return
+    }
     updateVolunteerProfile(volunteer.id, { ...f, firstName: f.firstName.trim(), lastName: f.lastName.trim(), headline: f.headline.trim(), bio: f.bio.trim() })
     toast('Profile updated.')
     onDone?.()

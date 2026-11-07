@@ -1,16 +1,15 @@
 import { supabase } from '../lib/supabase'
-import type { AccountType } from '../types'
+import { updateProfile } from '../lib/api/profiles'
+import type { Profile } from '../types/models'
 
 /**
- * Account operations that sit next to authService.ts. The account type is kept in
- * Supabase Auth user_metadata until the profiles table gains account_type/onboarded
- * columns (see SUPABASE_CHANGES_NEEDED.txt). user_metadata is user-editable, so it is
- * only used for routing/UX here. Never use it to authorize anything.
+ * Account operations that sit next to authService.ts. Account type is chosen at signup and lives
+ * in public.profiles (see the signup trigger); it is never changed from the client.
  */
 
-export async function saveAccountType(type: AccountType) {
-  const { error } = await supabase.auth.updateUser({ data: { account_type: type } })
-  if (error) throw error
+/** Saves the display name to public.profiles.full_name and returns the updated row. */
+export function saveFullName(first: string, last: string): Promise<Profile> {
+  return updateProfile({ full_name: `${first.trim()} ${last.trim()}`.trim() })
 }
 
 export async function requestPasswordReset(email: string) {

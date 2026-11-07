@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase'
+import { updateProfile } from '../lib/api/profiles'
 
 export const AVATAR_BUCKET = 'avatars'
 export const MAX_AVATAR_SIZE_BYTES = 5 * 1024 * 1024
@@ -15,6 +16,13 @@ export async function uploadAvatar(file: File, userId: string) {
   if (file.size === 0) throw new Error('The selected image is empty.')
   if (file.size > MAX_AVATAR_SIZE_BYTES) {
     throw new Error('Choose an image smaller than 5 MB.')
+  }
+
+  const { data: authData, error: authError } = await supabase.auth.getUser()
+  if (authError) throw authError
+  if (!authData.user) throw new Error('Sign in before uploading an avatar.')
+  if (authData.user.id !== userId) {
+    throw new Error('You can only upload an avatar for your own profile.')
   }
 
   // A stable per-user object path means replacing an avatar does not leave
@@ -34,10 +42,9 @@ export async function uploadAvatar(file: File, userId: string) {
   publicUrl.searchParams.set('v', String(Date.now()))
   const avatarUrl = publicUrl.toString()
 
-  const { error: profileError } = await supabase.auth.updateUser({
-    data: { avatar_path: path, avatar_url: avatarUrl },
-  })
-  if (profileError) throw profileError
+  // The backend trigger creates profiles.id = auth.users.id. This API scopes
+  // the update to the current Auth user and reports a missing profile as an error.
+  const profile = await updateProfile({ avatar_url: avatarUrl })
 
-  return { path, publicUrl: avatarUrl }
+  return { path, publicUrl: avatarUrl, profile }
 }

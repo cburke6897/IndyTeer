@@ -4,6 +4,7 @@ import { AppShell } from './components/layout/AppShell'
 import { PublicOnly, RequireOnboarding, RequireRole } from './components/layout/RouteGuards'
 import { Toaster } from './components/ui/Toaster'
 import { AuthProvider } from './auth/AuthProvider'
+import { ProfileProvider } from './auth/ProfileProvider'
 import { SessionBridge } from './auth/SessionBridge'
 import { LinkButton } from './components/ui/Button'
 import LandingPage from './pages/LandingPage'
@@ -11,7 +12,6 @@ import LoginPage from './pages/auth/LoginPage'
 import SignupPage from './pages/auth/SignupPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
-import AccountTypePage from './pages/onboarding/AccountTypePage'
 import VolunteerOnboardingPage from './pages/onboarding/VolunteerOnboardingPage'
 import OrgOnboardingPage from './pages/onboarding/OrgOnboardingPage'
 import DashboardPage from './pages/volunteer/DashboardPage'
@@ -51,6 +51,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+      <ProfileProvider>
       <SessionBridge />
       <ScrollToTop />
       <Routes>
@@ -65,7 +66,6 @@ export default function App() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         <Route element={<RequireOnboarding />}>
-          <Route path="/onboarding/account-type" element={<AccountTypePage />} />
           <Route path="/onboarding/volunteer" element={<VolunteerOnboardingPage />} />
           <Route path="/onboarding/organization" element={<OrgOnboardingPage />} />
         </Route>
@@ -104,6 +104,7 @@ export default function App() {
         <Route path="*" element={<NotFound />} />
       </Routes>
       <Toaster />
+      </ProfileProvider>
       </AuthProvider>
     </BrowserRouter>
   )

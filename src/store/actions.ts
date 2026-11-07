@@ -27,37 +27,34 @@ const volunteerName = (v?: VolunteerProfile) => (v ? `${v.firstName} ${v.lastNam
 export interface AuthUserLike {
   id: string
   email?: string | null
-  user_metadata?: Record<string, unknown> | null
 }
 
-function namesFromMetadata(meta: Record<string, unknown>, email: string) {
-  const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
-  let first = str(meta.first_name)
-  let last = str(meta.last_name)
-  if (!first && !last) {
-    const parts = (str(meta.display_name) || str(meta.full_name) || email.split('@')[0]).split(/\s+/)
-    first = parts[0] ?? ''
-    last = parts.slice(1).join(' ')
-  }
-  return { first, last }
+export type ProfileLike = { account_type: AccountType; full_name: string; avatar_url: string | null }
+
+function splitName(full: string, email: string) {
+  const parts = (full.trim() || email.split('@')[0]).split(/\s+/)
+  return { first: parts[0] ?? '', last: parts.slice(1).join(' ') }
 }
 
-/** Mirrors the Supabase Auth user into the local store (idempotent; no-op when nothing changed). */
-export function syncAuthUser(authUser: AuthUserLike | null) {
+/**
+ * Mirrors the signed-in Supabase user and their database profile into the local store.
+ * The profile is authoritative for account type and avatar. Names are copied when the local user
+ * is created; later edits are written to both places by the Settings/profile forms.
+ * Idempotent: does nothing when the store is already in sync.
+ */
+export function syncAuthUser(authUser: AuthUserLike | null, profile: ProfileLike | null) {
   const db = getDB()
-  if (!authUser) {
+  if (!authUser || !profile) {
     if (db.sessionUserId !== null) setDB((d) => ({ ...d, sessionUserId: null }))
     return
   }
-  const meta = authUser.user_metadata ?? {}
   const email = authUser.email ?? ''
-  const metaType = meta.account_type === 'volunteer' || meta.account_type === 'organization' ? meta.account_type : null
   const existing = db.users.find((u) => u.id === authUser.id)
 
   if (!existing) {
-    const { first, last } = namesFromMetadata(meta, email)
+    const { first, last } = splitName(profile.full_name, email)
     const user: User = {
-      id: authUser.id, email, firstName: first, lastName: last, accountType: metaType,
+      id: authUser.id, email, firstName: first, lastName: last, accountType: profile.account_type,
       onboarded: false, profileId: null, createdAt: nowISO(),
     }
     setDB((d) => ({
@@ -69,21 +66,24 @@ export function syncAuthUser(authUser: AuthUserLike | null) {
     return
   }
 
-  const typeChanged = !!metaType && existing.accountType !== metaType && !existing.onboarded
+  const typeChanged = existing.accountType !== profile.account_type
   const emailChanged = !!email && existing.email !== email
-  if (typeChanged || emailChanged || db.sessionUserId !== existing.id) {
+  const localVolunteer = existing.accountType === 'volunteer' && existing.profileId
+    ? db.volunteers.find((v) => v.id === existing.profileId)
+    : undefined
+  const avatarChanged = !!localVolunteer && localVolunteer.avatar !== profile.avatar_url
+  if (typeChanged || emailChanged || avatarChanged || db.sessionUserId !== existing.id) {
     setDB((d) => ({
       ...d,
       users: d.users.map((u) => (u.id === existing.id
-        ? { ...u, email: emailChanged ? email : u.email, accountType: typeChanged ? metaType : u.accountType }
+        ? { ...u, email: emailChanged ? email : u.email, accountType: profile.account_type }
         : u)),
+      volunteers: avatarChanged
+        ? d.volunteers.map((v) => (v.id === localVolunteer!.id ? { ...v, avatar: profile.avatar_url } : v))
+        : d.volunteers,
       sessionUserId: existing.id,
     }))
   }
-}
-
-export function chooseAccountType(userId: string, type: AccountType) {
-  setDB((d) => ({ ...d, users: d.users.map((u) => (u.id === userId ? { ...u, accountType: type } : u)) }))
 }
 
 export interface VolunteerOnboardingInput {
