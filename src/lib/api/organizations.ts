@@ -107,6 +107,15 @@ export async function setOrganizationMemberRole(organizationId: string, userId: 
   return data as OrganizationMembership
 }
 
+/** Delete an organization and its Storage assets. The Edge Function verifies active ownership. */
+export async function deleteOrganization(organizationId: string): Promise<void> {
+  const { error } = await db.functions.invoke('delete-organization', {
+    method: 'POST',
+    body: { organizationId },
+  })
+  if (error) throw new Error(error.message)
+}
+
 export async function setOrganizationVerified(organizationId: string, verified: boolean) {
   const { data, error } = await db.rpc('set_organization_verified', {
     p_organization_id: organizationId, p_verified: verified,
@@ -130,9 +139,9 @@ export async function listOrganizationMembers(organizationId: string): Promise<O
   return data as OrganizationMemberRow[]
 }
 
-/** Hands ownership to an active member; the previous owner becomes an admin. Owners only. */
+/** Hands ownership to an active admin/member; the previous owner becomes an admin. Owners only. */
 export async function transferOrganizationOwnership(organizationId: string, newOwnerId: string): Promise<OrganizationMembership> {
-  const { data, error } = await db.rpc('transfer_organization_ownership', { p_organization_id: organizationId, p_new_owner: newOwnerId })
+  const { data, error } = await db.rpc('transfer_organization_ownership', { p_organization_id: organizationId, p_new_owner_id: newOwnerId })
   if (error) throw Object.assign(new Error(error.message), { code: error.code })
   return data as OrganizationMembership
 }

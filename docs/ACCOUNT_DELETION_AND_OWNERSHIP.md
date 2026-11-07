@@ -24,9 +24,9 @@ Steps 4-6 are not one transaction. A failure after step 4 can leave files or org
 
 ## Backend pieces
 
-- Migration `supabase/migrations/20261107210000_ownership_transfer.sql` adds two `SECURITY DEFINER` functions, callable by signed-in users only; no table, column, policy, or existing function changes:
-  - `transfer_organization_ownership(p_organization_id, p_new_owner)`: caller must be an active owner; the target must be an active member; promotes the target, demotes the caller to admin, updates `created_by`, notifies the new owner.
-  - `list_organization_members(p_organization_id)`: names, roles, and statuses for an organization's admins (the `users` table is private, so memberships alone have only ids).
+- `supabase/migrations/20261107173000_organization_ownership.sql` (the backend owner's) defines `transfer_organization_ownership(p_organization_id, p_new_owner_id)`: the caller must be an active owner, the target an active admin or member; the target becomes owner, the caller becomes an admin, `created_by` follows, and the new owner is notified.
+- `supabase/migrations/20261107210000_ownership_transfer.sql` adds `list_organization_members(p_organization_id)`: names, roles, and statuses for an organization's admins (the `users` table is private, so memberships alone have only ids). `SECURITY DEFINER`, signed-in users only, no table, column, or policy changes.
+- `supabase/functions/delete-organization` (the backend owner's) deletes a single organization by id for its owner. The account flow does not use it.
 - `src/types/database.ts` was regenerated from the migrated local database.
 
 ## Verified on a local Supabase stack (all migrations applied)
@@ -43,4 +43,4 @@ Steps 4-6 are not one transaction. A failure after step 4 can leave files or org
 ## Deployment status
 
 - Code and the migration are in the repo. **Nothing was deployed or pushed**: the project is not linked to the Supabase CLI (`supabase/.temp` is absent) and no access token was used.
-- Until the migration is applied, the modal cannot list names or transfer, and offers deletion only. Until the function is deployed (`npx supabase functions deploy delete-account`), the remote function is the **old** version: no per-organization decision, no safe hand-over of images, and the browser CORS preflight fails. Apply the migration and deploy the function together.
+- Until both ownership migrations are applied, the modal cannot list names or transfer, and offers deletion only. Until the function is deployed (`npx supabase functions deploy delete-account`), the remote function is the **old** version: no per-organization decision, no safe hand-over of images, and the browser CORS preflight fails. Apply the migrations and deploy the function together.

@@ -1,0 +1,29 @@
+Future implementation: public profile visibility
+=================================================
+
+Implement public profile visibility levels for volunteer profiles. The
+frontend previously offered these choices, but the backend does not yet
+enforce their distinct access rules:
+
+* Everyone: profile can be viewed by logged-out visitors and signed-in users.
+* IndyTeer members only: profile can be viewed by authenticated users.
+* Organizations I volunteer with: profile can be viewed by organizations
+  connected to the volunteer under an explicitly defined relationship rule.
+
+Implementation work
+-------------------
+1. Confirm whether "Everyone" includes all profile fields or only public
+   profile details, and define which organization relationships grant access.
+2. Add a persisted visibility field and migration. Map existing
+   public_profile values to a sensible default for current accounts.
+3. Enforce visibility in database policies/RPCs and every relevant frontend
+   route. Frontend-only hiding is not access control.
+4. Keep the existing public_profile, show_hours, and show_history controls
+   coherent with the new visibility levels, or replace redundant controls with
+   a documented migration plan.
+5. Define how phone, availability, verified hours, and volunteer history are
+   exposed at each level.
+6. Update profile discovery/search and private-profile states to follow the
+   same access rules.
+7. Cover logged-out visitors, signed-in members, unrelated organizations,
+   connected organizations, and each visibility level.

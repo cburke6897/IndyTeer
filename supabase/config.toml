@@ -442,3 +442,6 @@ enabled = true
 
 [functions.delete-account]
 verify_jwt = true
+
+[functions.delete-organization]
+verify_jwt = true

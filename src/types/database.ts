@@ -708,7 +708,7 @@ isOneToOne: true
         isSetofReturn: false
       } },
 "transfer_organization_ownership":
-{ Args: { "p_new_owner": string,"p_organization_id": string }; Returns: {
+{ Args: { "p_new_owner_id": string,"p_organization_id": string }; Returns: {
               "created_at": string,
 "invited_by": string | null,
 "organization_id": string,

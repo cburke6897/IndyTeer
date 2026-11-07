@@ -207,9 +207,9 @@ function PrivacySection() {
     <Card>
       <CardHeader title="Privacy" subtitle="Control who can see your information" action={<ShieldCheck size={18} className="text-navy-700" />} />
       <div className="divide-y divide-line px-5">
-        <ToggleRow title="Public profile" description="Allow organizations to view your profile even before you register with them." checked={p.publicProfile} onChange={set('publicProfile')} />
-        <ToggleRow title="Display volunteer hours" description="Show your total verified hours on your profile." checked={p.showHours} onChange={set('showHours')} />
-        <ToggleRow title="Display volunteer history" description="Show events you’ve volunteered at." checked={p.showHistory} onChange={set('showHistory')} />
+        <ToggleRow title="Public profile" description="Let organizations view your volunteer profile. If off, organizations you have a pending or approved registration with can still view it." checked={p.publicProfile} onChange={set('publicProfile')} />
+        <ToggleRow title="Display volunteer hours publicly" description="Show your total verified hours on your profile." checked={p.showHours} onChange={set('showHours')} />
+        <ToggleRow title="Display volunteer history publicly" description="Show events you’ve volunteered at." checked={p.showHistory} onChange={set('showHistory')} />
       </div>
     </Card>
   )

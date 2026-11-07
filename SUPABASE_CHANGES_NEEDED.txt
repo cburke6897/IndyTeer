@@ -235,7 +235,7 @@ Typing and files
  G4. Move CAUSES/NEIGHBORHOODS out of types (runtime constants) and delete them in favor of
      src/lib/constants.ts (CATEGORIES, INDIANA_CITIES) [C7].
  G5. src/lib/supabase.ts: add a clear startup error screen (or fallback) for missing
-     VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY, and create a local .env from .env.example.
+     VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY, and create a local .env from .env.example.
 
 API layer (src/lib/api/*)
  G6.  Rewrite/extend to cover everything the UI uses. Keep one file per area:
