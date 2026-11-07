@@ -36,8 +36,8 @@ export function OrgProfileHeader({ org, actions, meta }: { org: OrgProfile; acti
         <div className="absolute inset-0 bg-gradient-to-t from-navy-950/40 to-transparent" />
       </div>
       <div className="px-5 pb-5 sm:px-7">
-        <div className="-mt-12 flex flex-wrap items-end justify-between gap-3 sm:-mt-14">
-          <OrgLogo org={org} size="2xl" className="rounded-lg bg-white ring-4 ring-white" />
+        <div className="relative z-10 -mt-12 flex flex-wrap items-end justify-between gap-3 sm:-mt-14">
+          <OrgLogo org={org} size="2xl" className="relative z-10 rounded-lg bg-white ring-4 ring-white" />
           {actions && <div className="flex gap-2 pb-1">{actions}</div>}
         </div>
         <div className="mt-3 flex items-center gap-2">
